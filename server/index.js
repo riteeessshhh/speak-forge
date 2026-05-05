@@ -52,5 +52,5 @@ app.get('/health', (req, res) => {
 // Start Server
 app.listen(PORT, () => {
   log.info(`SpeakForge Server running on port ${PORT}`);
-  log.info(`CORS allowed from: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+  log.info(`CORS allowed from: ${allowedOrigin}`);
 });
