@@ -68,5 +68,5 @@ app.use((err, req, res, next) => {
 // Start Server
 app.listen(PORT, () => {
   log.info(`SpeakForge Server running on port ${PORT}`);
-  log.info(`CORS allowed from: ${allowedOrigin}`);
+  log.info(`CORS allowed from: ${baseOrigin} (and / version)`);
 });
