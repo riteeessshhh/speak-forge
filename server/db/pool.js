@@ -32,6 +32,8 @@ const pool = new Pool({
   connectionString,
   ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000,
+  // Force IPv4 to avoid ENETUNREACH errors on Render/Supabase
+  family: 4, 
 });
 
 pool.on('error', (err) => {
