@@ -81,7 +81,7 @@ router.post('/logout', (req, res) => {
   res.clearCookie('sf_token', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
     path: '/',
   });
   log.info('User logged out.');
