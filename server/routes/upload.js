@@ -111,8 +111,10 @@ Structure:
       } catch (err) {
         lastError = err;
         const msg = err.message || '';
-        if (msg.includes('404') || msg.includes('429')) {
-          log.warn(`${modelName} unavailable (${msg.includes('404') ? '404 Not Found' : '429 Quota/Rate Limit'}). Trying next model...`);
+        const status = err.status || err.code || 500;
+        if (status === 404 || status === 429 || status === 503 || msg.includes('high demand')) {
+          const reason = status === 404 ? 'Not Found' : (status === 429 ? 'Quota' : 'High Demand');
+          log.warn(`${modelName} unavailable (${reason}). Trying next model...`);
         } else {
           throw err;
         }

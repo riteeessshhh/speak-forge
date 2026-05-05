@@ -70,11 +70,11 @@ router.post('/', verifyToken, generateLimiter, validate(topicSchema), async (req
       });
     }
 
-    // 5. Synchronous Gemini fallback (cache completely empty)
-    log.warn("Cache completely empty, synchronous fallback generation...");
-    const prompt = `Generate 1 unique impromptu speaking question for "${track}" at "${difficulty}". JSON array: [{"text": "...", "isBehavioral": boolean}].`;
+    // 5. Synchronous Gemini fallback (cache completely empty or forced)
+    log.warn("Cache low or empty, synchronous fallback generation...");
+    const prompt = `Generate 1 unique, highly specific impromptu speaking question for "${track}" at "${difficulty}". JSON array: [{"text": "...", "isBehavioral": boolean}].`;
     log.info("[API Call] Gemini triggered (fallback-generate)");
-    let text = await withExponentialBackoff(() => generateContent(prompt));
+    let text = await withExponentialBackoff(() => generateContent(prompt), 2, 1000);
     text = text.trim();
     if (text.startsWith('```json')) text = text.replace(/```json\n?/, '').replace(/```\n?$/, '');
     else if (text.startsWith('```')) text = text.replace(/```\n?/, '').replace(/```\n?$/, '');

@@ -40,8 +40,9 @@ export const withExponentialBackoff = async (fn, retries = 3, delay = 1000) => {
     } catch (error) {
       if (i === retries - 1) throw error;
       const msg = error.message || '';
-      if (error.status === 429 || error.status === 503 || msg.includes('429') || msg.includes('503')) {
-        log.warn(`Gemini API busy (status ${error.status || 429}). Retrying ${i + 1}/${retries} in ${delay}ms...`);
+      const status = error.status || error.code || 500;
+      if (status === 429 || status === 503 || msg.includes('429') || msg.includes('503') || msg.includes('high demand')) {
+        log.warn(`Gemini API busy (${status}). Retrying ${i + 1}/${retries} in ${delay}ms...`);
         await new Promise(res => setTimeout(res, delay));
         delay *= 2;
       } else {
