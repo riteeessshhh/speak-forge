@@ -21,26 +21,38 @@ const router = Router();
  */
 router.post('/signup', validate(signupSchema), async (req, res) => {
   const { email, password } = req.validated;
-  const client = await pool.connect();
+  log.info(`Signup attempt for: ${email}`);
+  
+  let client;
   try {
+    log.info('Connecting to database pool...');
+    client = await pool.connect();
+    
+    log.info('Checking for existing user...');
     const existing = await findUserByEmail(client, email);
     if (existing) {
+      log.warn(`Signup conflict: ${email} already exists`);
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
+    log.info('Hashing password...');
     const passwordHash = await bcrypt.hash(password, 12);
+    
+    log.info('Creating user in database...');
     const user = await createUser(client, email, passwordHash);
 
+    log.info('Generating JWT token...');
     const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.cookie('sf_token', token, COOKIE_OPTIONS);
 
-    log.info(`New user registered: ${user.email}`);
+    log.info(`Signup successful: ${user.email}`);
     res.status(201).json({ user: { id: user.id, email: user.email, createdAt: user.created_at } });
   } catch (err) {
-    log.error('Signup error:', err.message);
-    res.status(500).json({ error: 'Internal server error.' });
+    log.error(`Signup Error at step: ${err.message}`);
+    log.error(err.stack);
+    res.status(500).json({ error: 'Internal server error during signup.' });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
