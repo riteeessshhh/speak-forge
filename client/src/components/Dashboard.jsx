@@ -7,6 +7,17 @@
 import { useState, useEffect } from "react";
 import { BarChart3, TrendingUp, TrendingDown, Minus, ArrowLeft, Loader2, Sparkles, Mic, History } from "lucide-react";
 import Skeleton, { SkeletonText, SkeletonCircle } from "./Skeleton";
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from "recharts";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -66,25 +77,151 @@ export default function Dashboard({ onBack }) {
     );
   }
 
-  const summary = data?.summary;
   const sessions = data?.sessions || [];
-  const totalSessions = parseInt(summary?.total_sessions || 0);
+  const totalSessions = parseInt(data?.summary?.total_sessions || 0);
+
+  // ─── 1. MOMENTUM ENGINE (Recency-Weighted Metrics) ───
+  const calculateRecentMetrics = (sessionList, windowSize = 10) => {
+    const getAvg = (list, key) => {
+      const validScores = list
+        .map(s => parseFloat(s[key]))
+        .filter(val => !isNaN(val) && val > 0);
+      if (validScores.length === 0) return 0;
+      return validScores.reduce((a, b) => a + b, 0) / validScores.length;
+    };
+
+    const last10 = sessionList.slice(0, windowSize);
+    const prev10 = sessionList.slice(windowSize, windowSize * 2);
+
+    const metrics = ["confidence_score", "clarity_score", "structure_score", "filler_word_count"];
+    const results = {};
+
+    metrics.forEach(m => {
+      const currentAvg = getAvg(last10, m);
+      const previousAvg = getAvg(prev10, m);
+      const delta = currentAvg - previousAvg;
+      
+      // LOGIC FLIP: For fillers, a negative delta (fewer fillers) is an improvement (up)
+      let status = "stable";
+      if (m === "filler_word_count") {
+        status = delta < -0.1 ? "up" : delta > 0.1 ? "down" : "stable";
+      } else {
+        status = delta > 0.1 ? "up" : delta < -0.1 ? "down" : "stable";
+      }
+
+      results[m] = {
+        value: currentAvg.toFixed(1),
+        delta: delta.toFixed(1),
+        status: status
+      };
+    });
+
+    return results;
+  };
+
+  const recentMetrics = calculateRecentMetrics(sessions);
+  
+  // ─── 2. INTELLIGENCE ENGINE (Focus Area & Dates) ───
+  const last10 = sessions.slice(0, 10);
+  
+  // Find Dominant Track
+  const trackCounts = last10.reduce((acc, s) => {
+    acc[s.track_name] = (acc[acc.track_name] || 0) + 1;
+    return acc;
+  }, {});
+  const focusArea = Object.entries(trackCounts).sort((a,b) => b[1] - a[1])[0]?.[0] || "—";
+
+  // Prep chart data with smart date labels
+  const dateCounts = {};
+  const chartData = [...last10].reverse().map((s) => {
+    const dateStr = s.created_at ? new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+    dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+    const label = dateCounts[dateStr] > 1 ? `${dateStr} (${dateCounts[dateStr]})` : dateStr;
+    
+    return {
+      name: label,
+      Clarity: s.clarity_score && s.clarity_score > 0 ? parseFloat(s.clarity_score) : null,
+      Confidence: s.confidence_score && s.confidence_score > 0 ? parseFloat(s.confidence_score) : null,
+      topic: s.topic_text,
+      date: dateStr
+    };
+  });
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 p-3 rounded-xl shadow-2xl space-y-1.5 animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center justify-between gap-4 border-b border-zinc-800 pb-1.5 mb-1.5">
+            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{data.date}</span>
+            <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest">Session {data.name}</span>
+          </div>
+          <p className="text-[11px] text-zinc-300 font-medium italic max-w-[180px] line-clamp-1">"{data.topic}"</p>
+          <div className="flex gap-3 pt-1">
+            {payload.map((entry, index) => (
+              <div key={index} className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                <span className="text-xs font-bold text-white tabular-nums">{entry.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const summaryCards = [
-    { label: "Sessions", value: totalSessions, color: "text-violet-400", icon: Mic },
-    { label: "Confidence", value: summary?.avg_confidence || "—", suffix: "/10", color: "text-emerald-400", icon: TrendingUp },
-    { label: "Clarity", value: summary?.avg_clarity || "—", suffix: "/10", color: "text-sky-400", icon: Sparkles },
-    { label: "Structure", value: summary?.avg_structure || "—", suffix: "/10", color: "text-amber-400", icon: BarChart3 },
-    { label: "Fillers", value: summary?.avg_fillers || "—", color: "text-rose-400", icon: TrendingDown },
+    { 
+      label: "Lifetime Sessions", 
+      value: totalSessions, 
+      subtitle: "Total practice volume",
+      color: "text-violet-400", 
+      icon: Mic 
+    },
+    { 
+      label: "Confidence", 
+      value: recentMetrics.confidence_score.value, 
+      suffix: "/10", 
+      color: "text-emerald-400", 
+      icon: TrendingUp,
+      trend: recentMetrics.confidence_score
+    },
+    { 
+      label: "Clarity", 
+      value: recentMetrics.clarity_score.value, 
+      suffix: "/10", 
+      color: "text-sky-400", 
+      icon: Sparkles,
+      trend: recentMetrics.clarity_score
+    },
+    { 
+      label: "Structure", 
+      value: recentMetrics.structure_score.value, 
+      suffix: "/10", 
+      color: "text-amber-400", 
+      icon: BarChart3,
+      trend: recentMetrics.structure_score
+    },
+    { 
+      label: "Focus Area", 
+      value: focusArea, 
+      subtitle: "Most active track",
+      color: "text-rose-400", 
+      icon: History,
+    },
   ];
 
-  const getTrendIcon = (current, avg) => {
-    if (!current || !avg) return <Minus className="w-3 h-3 text-zinc-500" />;
-    const c = parseFloat(current);
-    const a = parseFloat(avg);
-    if (c > a) return <TrendingUp className="w-3 h-3 text-emerald-400" />;
-    if (c < a) return <TrendingDown className="w-3 h-3 text-rose-400" />;
-    return <Minus className="w-3 h-3 text-zinc-500" />;
+  const getScoreColor = (score) => {
+    if (!score || score === "—") return "text-zinc-500";
+    const val = parseFloat(score);
+    if (val < 3.0) return "text-rose-500 font-black";
+    return "";
+  };
+
+  const formatScore = (score) => {
+    if (score === null || score === undefined || score === 0) return "SKIPPED";
+    return score;
   };
 
   return (
@@ -95,11 +232,11 @@ export default function Dashboard({ onBack }) {
           <h2 className="text-2xl font-bold tracking-tight text-white">
             Performance Analytics
           </h2>
-          <p className="text-sm text-zinc-400 mt-1">Insights and trends from your practice sessions</p>
+          <p className="text-sm text-zinc-400 mt-1">Insights and trends calculated from your 10 most recent analyzed sessions.</p>
         </div>
         <button
           onClick={onBack}
-          className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:text-white hover:border-zinc-700 transition-standard cursor-pointer"
+          className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:text-white hover:border-zinc-700 transition-all cursor-pointer active:scale-95"
         >
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
           Arena
@@ -107,24 +244,102 @@ export default function Dashboard({ onBack }) {
       </div>
 
       {totalSessions > 0 ? (
-        <div className="space-y-8">
+        <div className="space-y-10">
           {/* Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
             {summaryCards.map((card) => (
               <div
                 key={card.label}
-                className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center hover:border-zinc-700 transition-standard group"
+                className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center hover:border-zinc-700 transition-standard group relative"
               >
                 <div className={`p-2 rounded-xl bg-zinc-800/50 mb-3 group-hover:scale-110 transition-transform ${card.color}`}>
                   <card.icon className="w-4 h-4" />
                 </div>
                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">{card.label}</span>
-                <span className={`text-xl font-black ${card.color}`}>
-                  {card.value}
-                  {card.suffix && <span className="text-xs text-zinc-600 font-bold">{card.suffix}</span>}
-                </span>
+                <div className="flex flex-col items-center">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xl font-black tabular-nums ${card.color}`}>
+                      {card.value === "0.0" ? "—" : card.value}
+                      {card.suffix && card.value !== "0.0" && <span className="text-xs text-zinc-600 font-bold tabular-nums">{card.suffix}</span>}
+                    </span>
+                    {card.trend && card.value !== "0.0" && (
+                      <span 
+                        title="Compared to your previous 10-session average"
+                        className={`text-[10px] font-bold cursor-help ${card.trend.status === 'up' ? 'text-emerald-500' : card.trend.status === 'down' ? 'text-rose-500' : 'text-zinc-600'}`}
+                      >
+                        {card.trend.status === 'up' ? '▲' : card.trend.status === 'down' ? '▼' : '•'}
+                      </span>
+                    )}
+                  </div>
+                  {card.subtitle && (
+                    <span className="text-[9px] text-zinc-600 font-medium uppercase tracking-tighter mt-0.5">{card.subtitle}</span>
+                  )}
+                </div>
               </div>
             ))}
+          </div>
+
+          {/* Trajectory Chart */}
+          <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Growth Trajectory</h3>
+                <p className="text-xs text-zinc-500">Visualizing Clarity and Confidence across your latest sessions</p>
+              </div>
+              <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-1.5 text-sky-400">
+                  <div className="w-2 h-2 rounded-full bg-sky-400" /> Clarity
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-400">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" /> Confidence
+                </div>
+              </div>
+            </div>
+            
+            <div className="h-64 w-full mt-4 relative">
+              {sessions.length < 2 && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/20 backdrop-blur-[2px] rounded-2xl border border-dashed border-zinc-800">
+                  <BarChart3 className="w-8 h-8 text-zinc-700 mb-3" />
+                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-center px-4">Complete more sessions to see your growth trajectory</p>
+                </div>
+              )}
+              
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorClarity" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorConfidence" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    stroke="#52525b" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false}
+                    dy={10}
+                    interval={0}
+                  />
+                  <YAxis 
+                    stroke="#52525b" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false}
+                    domain={[0, 10]}
+                    dx={-10}
+                  />
+                  <RechartsTooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="Clarity" stroke="#38bdf8" strokeWidth={2.5} fillOpacity={1} fill="url(#colorClarity)" animationDuration={1500} connectNulls={true} />
+                  <Area type="monotone" dataKey="Confidence" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorConfidence)" animationDuration={1500} connectNulls={true} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Sessions List */}
@@ -133,8 +348,8 @@ export default function Dashboard({ onBack }) {
               <History className="w-4 h-4 text-zinc-500" />
               <span className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Recent Activity</span>
               <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Latest 10 Sessions
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                Latest {Math.min(sessions.length, 10)} Sessions
               </div>
             </div>
 
@@ -165,14 +380,16 @@ export default function Dashboard({ onBack }) {
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/50 border border-zinc-800/50 group-hover:border-sky-500/30 transition-colors">
-                          <span className="text-sky-400 font-bold text-xs">{s.clarity_score ?? "—"}</span>
-                          {getTrendIcon(s.clarity_score, summary?.avg_clarity)}
+                          <span className={`font-bold text-xs ${getScoreColor(s.clarity_score)} ${!s.clarity_score ? 'text-zinc-600 italic' : 'text-sky-400'}`}>
+                            {formatScore(s.clarity_score)}
+                          </span>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/50 border border-zinc-800/50 group-hover:border-amber-500/30 transition-colors">
-                          <span className="text-amber-400 font-bold text-xs">{s.structure_score ?? "—"}</span>
-                          {getTrendIcon(s.structure_score, summary?.avg_structure)}
+                          <span className={`font-bold text-xs ${getScoreColor(s.structure_score)} ${!s.structure_score ? 'text-zinc-600 italic' : 'text-amber-400'}`}>
+                            {formatScore(s.structure_score)}
+                          </span>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
