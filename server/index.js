@@ -30,11 +30,14 @@ app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
     
-    // Normalize origins for comparison
+    // Normalize origins
     const normalizedOrigin = origin.trim().replace(/\/$/, '');
+    
+    // Check if it's in our list OR if it's a Vercel deployment URL
+    const isVercel = normalizedOrigin.endsWith('.vercel.app');
     const isAllowed = allowedOrigins.some(ao => ao.trim().replace(/\/$/, '') === normalizedOrigin);
     
-    if (isAllowed || process.env.NODE_ENV !== 'production') {
+    if (isAllowed || isVercel || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
       log.error(`CORS BLOCKED: Incoming origin "${origin}" did not match allowed origins: ${JSON.stringify(allowedOrigins)}`);
