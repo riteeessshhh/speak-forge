@@ -10,8 +10,8 @@ import pool from '../db/pool.js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Default model — gemini-2.0-flash (1500 RPD / 15 RPM free tier)
-const DEFAULT_MODEL = "gemini-2.0-flash";
+// Default model — gemini-1.5-flash (1500 RPD / 15 RPM free tier)
+const DEFAULT_MODEL = "gemini-1.5-flash";
 
 // Startup verification (no API call — zero quota usage)
 log.info(`Gemini SDK initialized. Default model: '${DEFAULT_MODEL}'`);

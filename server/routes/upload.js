@@ -99,8 +99,8 @@ Structure:
   "idealAnswer": "string (the 10% refactored version)"
 }`;
     let analysisText;
-    // Models confirmed available via ListModels (each has separate per-model quota)
-    const modelsToTry = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"];
+    // Models prioritized by user preference (1500 RPD tier)
+    const modelsToTry = ["gemini-1.5-flash", "gemini-flash-latest", "gemini-2.0-flash"];
     let lastError;
     for (const modelName of modelsToTry) {
       try {
