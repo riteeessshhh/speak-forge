@@ -53,7 +53,7 @@ export const getUnseenTopic = async (client, track, difficulty, userId) => {
        AND s.created_at >= NOW() - INTERVAL '12 hours'
      WHERE g.track_name = $1 
        AND g.difficulty = $2 
-       AND s.id IS NULL
+       AND s.session_id IS NULL
      ORDER BY RANDOM() LIMIT 1`,
     [track, difficulty, userId]
   );
@@ -91,25 +91,25 @@ export const insertSession = async (client, track, difficulty, topic, userId) =>
   const result = await client.query(
     `INSERT INTO sessions(track_name, difficulty, topic_text, user_id) 
      VALUES($1, $2, $3, $4) 
-     RETURNING id`,
+     RETURNING session_id`,
     [track, difficulty, topic, userId]
   );
-  return result.rows[0].id;
+  return result.rows[0].session_id;
 };
 
 export const insertRecording = async (client, sessionId, s3Url, transcript, analysisJson) => {
   const result = await client.query(
     `INSERT INTO recordings(session_id, audio_url, transcript, analysis) 
      VALUES($1, $2, $3, $4) 
-     RETURNING id`,
+     RETURNING recording_id`,
     [sessionId, s3Url, transcript, JSON.stringify(analysisJson)]
   );
-  return result.rows[0].id;
+  return result.rows[0].recording_id;
 };
 
 export const insertAnalytics = async (client, sessionId, userId, fillers, confidence, clarity, structure) => {
   await client.query(
-    `INSERT INTO analytics(session_id, user_id, filler_words_count, confidence_score, clarity_score, structure_score)
+    `INSERT INTO analytics(session_id, user_id, filler_word_count, confidence_score, clarity_score, structure_score)
      VALUES($1, $2, $3, $4, $5, $6)`,
     [sessionId, userId, fillers, confidence, clarity, structure]
   );
@@ -119,10 +119,10 @@ export const insertAnalytics = async (client, sessionId, userId, fillers, confid
 
 export const getRecentSessions = async (client, userId) => {
   const result = await client.query(
-    `SELECT s.id as session_id, s.track_name, s.difficulty, s.topic_text, s.created_at,
-            a.filler_words_count, a.confidence_score, a.clarity_score, a.structure_score
+    `SELECT s.session_id, s.track_name, s.difficulty, s.topic_text, s.created_at,
+            a.filler_word_count, a.confidence_score, a.clarity_score, a.structure_score
      FROM sessions s
-     LEFT JOIN analytics a ON s.id = a.session_id
+     LEFT JOIN analytics a ON s.session_id = a.session_id
      WHERE s.user_id = $1
      ORDER BY s.created_at DESC
      LIMIT 10`,
@@ -138,7 +138,7 @@ export const getAnalyticsSummary = async (client, userId) => {
        ROUND(AVG(a.confidence_score), 1) as avg_confidence,
        ROUND(AVG(a.clarity_score), 1) as avg_clarity,
        ROUND(AVG(a.structure_score), 1) as avg_structure,
-       ROUND(AVG(a.filler_words_count), 1) as avg_fillers
+       ROUND(AVG(a.filler_word_count), 1) as avg_fillers
      FROM analytics a
      WHERE a.user_id = $1`,
     [userId]
