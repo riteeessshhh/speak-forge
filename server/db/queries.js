@@ -99,7 +99,7 @@ export const insertSession = async (client, track, difficulty, topic, userId) =>
 
 export const insertRecording = async (client, sessionId, s3Url, transcript, analysisJson) => {
   const result = await client.query(
-    `INSERT INTO recordings(session_id, audio_url, transcript, analysis) 
+    `INSERT INTO recordings(session_id, s3_url, transcript, analysis) 
      VALUES($1, $2, $3, $4) 
      RETURNING recording_id`,
     [sessionId, s3Url, transcript, JSON.stringify(analysisJson)]
