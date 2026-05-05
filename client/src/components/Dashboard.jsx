@@ -225,9 +225,9 @@ export default function Dashboard({ onBack }) {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 animate-fade-in-up pb-12">
+    <div className="w-full max-w-4xl mx-auto space-y-6 animate-fade-in-up pb-12 px-0 lg:px-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4 lg:px-0">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white">
             Performance Analytics
@@ -244,18 +244,18 @@ export default function Dashboard({ onBack }) {
       </div>
 
       {totalSessions > 0 ? (
-        <div className="space-y-10">
+        <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 px-4 lg:px-0">
             {summaryCards.map((card) => (
               <div
                 key={card.label}
-                className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center hover:border-zinc-700 transition-standard group relative"
+                className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center hover:border-zinc-700 transition-standard group relative"
               >
-                <div className={`p-2 rounded-xl bg-zinc-800/50 mb-3 group-hover:scale-110 transition-transform ${card.color}`}>
+                <div className={`p-1.5 rounded-xl bg-zinc-800/50 mb-2 group-hover:scale-110 transition-transform ${card.color}`}>
                   <card.icon className="w-4 h-4" />
                 </div>
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">{card.label}</span>
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-0.5">{card.label}</span>
                 <div className="flex flex-col items-center">
                   <div className="flex items-center gap-1.5">
                     <span className={`text-xl font-black tabular-nums ${card.color}`}>
@@ -279,10 +279,10 @@ export default function Dashboard({ onBack }) {
             ))}
           </div>
 
-          {/* Trajectory Chart */}
-          <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+          {/* Trajectory Chart - Hidden on Mobile for Clarity */}
+          <div className="hidden lg:block bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-5 sm:p-6 space-y-4 relative mx-4 lg:mx-0">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="space-y-1 text-center sm:text-left">
                 <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Growth Trajectory</h3>
                 <p className="text-xs text-zinc-500">Visualizing Clarity and Confidence across your latest sessions</p>
               </div>
@@ -296,16 +296,16 @@ export default function Dashboard({ onBack }) {
               </div>
             </div>
             
-            <div className="h-64 w-full mt-4 relative">
+            <div className="w-full relative">
               {sessions.length < 2 && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/20 backdrop-blur-[2px] rounded-2xl border border-dashed border-zinc-800">
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/20 backdrop-blur-[2px] rounded-2xl border border-dashed border-zinc-800 text-center px-4">
                   <BarChart3 className="w-8 h-8 text-zinc-700 mb-3" />
-                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-center px-4">Complete more sessions to see your growth trajectory</p>
+                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Complete more sessions to see your growth trajectory</p>
                 </div>
               )}
               
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+              <ResponsiveContainer width="100%" aspect={4}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
                   <defs>
                     <linearGradient id="colorClarity" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.1}/>
@@ -323,8 +323,8 @@ export default function Dashboard({ onBack }) {
                     fontSize={10} 
                     tickLine={false} 
                     axisLine={false}
-                    dy={10}
                     interval={0}
+                    tickMargin={15}
                   />
                   <YAxis 
                     stroke="#52525b" 
@@ -332,24 +332,50 @@ export default function Dashboard({ onBack }) {
                     tickLine={false} 
                     axisLine={false}
                     domain={[0, 10]}
-                    dx={-10}
+                    tickCount={5}
                   />
                   <RechartsTooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="Clarity" stroke="#38bdf8" strokeWidth={2.5} fillOpacity={1} fill="url(#colorClarity)" animationDuration={1500} connectNulls={true} />
-                  <Area type="monotone" dataKey="Confidence" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorConfidence)" animationDuration={1500} connectNulls={true} />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Clarity" 
+                    stroke="#38bdf8" 
+                    strokeWidth={2.5} 
+                    fillOpacity={1} 
+                    fill="url(#colorClarity)" 
+                    animationDuration={1500} 
+                    connectNulls={true}
+                    dot={{ r: 3, strokeWidth: 0, fill: '#38bdf8' }}
+                    activeDot={{ r: 6, strokeWidth: 0 }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Confidence" 
+                    stroke="#10b981" 
+                    strokeWidth={2.5} 
+                    fillOpacity={1} 
+                    fill="url(#colorConfidence)" 
+                    animationDuration={1500} 
+                    connectNulls={true}
+                    dot={{ r: 3, strokeWidth: 0, fill: '#10b981' }}
+                    activeDot={{ r: 6, strokeWidth: 0 }}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Sessions List */}
-          <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-3xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-zinc-800/50 flex items-center gap-3">
-              <History className="w-4 h-4 text-zinc-500" />
-              <span className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Recent Activity</span>
-              <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                Latest {Math.min(sessions.length, 10)} Sessions
+          {/* Recent Activity - Hidden on Desktop, Visible on Mobile */}
+          <div className="lg:hidden bg-zinc-900/30 border border-zinc-800/50 rounded-3xl overflow-hidden mx-4 lg:mx-0">
+            <div className="px-6 py-4 border-b border-zinc-800/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <History className="w-4 h-4 text-zinc-500" />
+                <span className="text-sm font-bold text-zinc-300 uppercase tracking-widest">Recent Activity</span>
+              </div>
+              <div className="hidden sm:flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest">
+                  Latest {Math.min(sessions.length, 10)} Sessions
+                </span>
               </div>
             </div>
 
@@ -366,7 +392,7 @@ export default function Dashboard({ onBack }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/30">
-                  {sessions.map((s, i) => (
+                  {sessions.slice(0, 10).map((s, i) => (
                     <tr key={s.session_id || i} className="group hover:bg-zinc-800/20 transition-colors">
                       <td className="px-6 py-4">
                         <div className="text-sm text-zinc-200 font-medium line-clamp-1 max-w-[240px] group-hover:text-white transition-colors" title={s.topic_text}>
