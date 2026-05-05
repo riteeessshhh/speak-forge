@@ -58,6 +58,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+  log.error(`Unhandled Error: ${err.message}`);
+  log.error(err.stack);
+  res.status(500).json({ error: 'Internal server error.' });
+});
+
 // Start Server
 app.listen(PORT, () => {
   log.info(`SpeakForge Server running on port ${PORT}`);
