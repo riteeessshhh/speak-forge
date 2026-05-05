@@ -28,11 +28,16 @@ const allowedOrigins = [baseOrigin, `${baseOrigin}/`];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    
+    // Normalize origins for comparison
+    const normalizedOrigin = origin.trim().replace(/\/$/, '');
+    const isAllowed = allowedOrigins.some(ao => ao.trim().replace(/\/$/, '') === normalizedOrigin);
+    
+    if (isAllowed || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
+      log.error(`CORS BLOCKED: Incoming origin "${origin}" did not match allowed origins: ${JSON.stringify(allowedOrigins)}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
