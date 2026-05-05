@@ -69,33 +69,26 @@ export function useAudioRecorder() {
       mediaRecorder.onstop = () => {
         if (stopTimeoutRef.current) clearTimeout(stopTimeoutRef.current);
         
-        // 1. Final Flush Logic: Capture chunks immediately to prevent race conditions
+        // 1. Final Flush Logic: Capture chunks immediately
         const finalChunks = [...chunksRef.current];
-        chunksRef.current = [];
-
-        if (finalChunks.length === 0) {
-          setError("No audio data captured.");
-          setStatus('idle');
-          return;
-        }
-
-        // 2. Generate Blob and URL from local copy
+        
+        // 2. Commit Blobs
         const finalType = mediaRecorder.mimeType || 'audio/webm';
         const blob = new Blob(finalChunks, { type: finalType });
         const url = URL.createObjectURL(blob);
         
-        // 3. Commit States
         setAudioUrl(url);
         setAudioBlob(blob);
         
-        // 4. Hardware Release AFTER encoding
+        // 3. Hardware Release
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
         }
         setStream(null);
+        chunksRef.current = [];
 
-        // 5. Signal Ready
+        // 4. Signal Ready (Absolute final line)
         setStatus('ready');
       };
 
@@ -115,14 +108,14 @@ export function useAudioRecorder() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       setStatus('processing');
       
-      // Safety timeout for onstop event
+      // Safety timeout for onstop event (3 seconds)
       stopTimeoutRef.current = setTimeout(() => {
         if (status === 'processing') {
           console.error("[Recorder] onstop timeout. Force reset.");
           setStatus('idle');
           setError("Recording failed to finalize. Check mic and try again.");
         }
-      }, 2000);
+      }, 3000);
 
       mediaRecorderRef.current.stop();
     }

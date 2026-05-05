@@ -193,14 +193,15 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (phase === "recording" && status === "ready") {
+    // Reactive Transition: Selection -> Review
+    if (phase === "recording" && status === "ready" && audioUrl) {
       setPhase("review");
     }
-    // Error toast if recording fails to finalize
+    // Error toast if recording fails
     if (status === 'idle' && phase === 'recording' && !audioBlob) {
       toast.error("Recording failed. Please check your mic and try again.");
     }
-  }, [phase, status, audioBlob]);
+  }, [phase, status, audioUrl, audioBlob]);
 
   const handleReset = () => {
     clearAudio();
@@ -444,10 +445,13 @@ function AppContent() {
                       {status === 'ready' && audioUrl ? (
                         <audio src={audioUrl} controls className="w-full max-w-md opacity-90 accent-violet-500" />
                       ) : (
-                        <div className="flex items-center gap-3 text-zinc-500 py-4">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="text-xs font-bold uppercase tracking-widest">
-                            Finalizing audio...
+                        <div className="flex flex-center flex-col items-center gap-4 text-zinc-500 py-8">
+                          <div className="relative">
+                            <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                            <div className="absolute inset-0 bg-violet-500 blur-xl opacity-20 animate-pulse" />
+                          </div>
+                          <span className="text-xs font-black uppercase tracking-[0.2em] animate-pulse">
+                            Encoding High-Fidelity Audio...
                           </span>
                         </div>
                       )}
