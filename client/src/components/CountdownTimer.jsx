@@ -18,18 +18,25 @@ import { useState, useEffect, useRef } from "react";
 import { Mic, SkipForward, Brain } from "lucide-react";
 import { DIFFICULTY_META } from "../data/topics";
 
+const PREP_TIMES = {
+  easy: 20,
+  medium: 30,
+  hard: 45
+};
+
 export default function CountdownTimer({
-  duration = 30,
   onComplete,
   onSkip,
   topic,
   sourceTrack,
   difficulty,
 }) {
+  const duration = PREP_TIMES[difficulty] || 30;
   const [timeLeft, setTimeLeft] = useState(duration);
   const intervalRef = useRef(null);
 
   useEffect(() => {
+    setTimeLeft(duration);
     intervalRef.current = setInterval(() => {
       setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
@@ -112,9 +119,9 @@ export default function CountdownTimer({
       </div>
 
       {/* ── Status ── */}
-      <div className="flex items-center gap-2 text-text-secondary text-sm">
-        <Brain className="w-4 h-4 text-primary-light animate-pulse" />
-        <span>Organize your thoughts...</span>
+      <div className={`flex items-center gap-2 text-sm transition-colors duration-300 ${timeLeft <= 5 ? "text-amber-500 font-bold" : "text-text-secondary"}`}>
+        <Brain className={`w-4 h-4 ${timeLeft <= 5 ? "animate-bounce" : "animate-pulse"}`} />
+        <span>{timeLeft <= 5 ? "Get ready to speak!" : "Organize your thoughts..."}</span>
       </div>
 
       {/* ── Skip Button ── */}

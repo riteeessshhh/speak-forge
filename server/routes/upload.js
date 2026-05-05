@@ -68,35 +68,46 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
     const transcriptText = transcription.text;
     log.info(`Transcription complete: ${transcriptText.length} chars`);
 
-    if (!transcriptText || transcriptText.trim().length < 5) {
-      throw new Error("Forge couldn't hear you clearly. Please ensure your microphone is working and try speaking again.");
-    }
-
-    // ─── 3. DETERMINISTIC FILLER WORD COUNT (Regex Ground Truth) ───
+    // ─── 3. DETERMINISTIC FILLER WORD COUNT & PRE-FILTER ───
     const fillerRegex = /\b(u[hm]+|like|you know|basically|actually|literally|so+|well|I mean|right)\b/gi;
     const fillerMatches = transcriptText.match(fillerRegex) || [];
     const fillerCount = fillerMatches.length;
 
-    // ─── 4. GEMINI LLM ANALYSIS ───
-    const prompt = `Analyze transcript. Track: ${track}, Topic: "${topic}", Transcript: "${transcriptText}". JSON format ONLY.
-1. Vocabulary Baseline: Identify user proficiency (Basic, Mid, or Advanced).
-2. Incremental Polish (10% Rule): 'idealAnswer' must be a direct refactor of user's words (no generic corporate-speak).
-3. Constraints: Swap 2-3 weak verbs (e.g. 'made'->'developed'), tighten 1-2 rambling sentences. Maintain user's original voice.
-4. feedback: In overallFeedback, explain the "Why" behind your specific polish choices.
-5. isBehavioral: ${isBehavioralBool}. If TRUE: use STAR. If FALSE: focus on Flow/Articulation.
-6. Return clarityScore (1-10) and structureScore (1-10) as separate fields.
+    const wordCount = transcriptText?.trim().split(/\s+/).filter(w => w.length > 0).length || 0;
+    const isInvalidSession = wordCount < 3;
 
-Structure:
+    // ─── 4. GEMINI LLM ANALYSIS (The 'Brutal Truth' Layer) ───
+    const prompt = `Analyze this interview response.
+Topic: "${topic}"
+Track: ${track}
+Transcript: "${isInvalidSession ? "[INVALID_SESSION: NO VALID SPEECH DETECTED]" : transcriptText}"
+
+STRICT EVALUATION RULES:
+1. IF TRANSCRIPT IS "[INVALID_SESSION: NO VALID SPEECH DETECTED]":
+   - Set confidenceScore, clarityScore, and structureScore to 0.
+   - Set overallFeedback to: "SpeakForge couldn't hear you clearly. Please ensure your microphone is working and you are answering the prompt."
+   - Set idealAnswer to a STANDARD, simple sample answer for the prompt.
+   - Return EMPTY arrays [] for strengths and weaknesses.
+2. RELEVANCE AUDIT: If transcript is irrelevant noise or "potato salad":
+   - Set all scores to 0.
+   - Set overallFeedback to: "The input provided is irrelevant to the topic. Please stay on track."
+   - Set idealAnswer to a STANDARD sample answer.
+   - Return EMPTY arrays [] for strengths.
+3. SCORING & POLISH (Normal Case):
+   - confidenceScore (1-10), clarityScore (1-10), structureScore (1-10).
+   - idealAnswer: A 10% refactored version of user words using simple vocabulary.
+
+JSON Structure ONLY:
 {
-  "starMethodUsed": boolean|null (true/false ONLY if isBehavioral=TRUE),
-  "confidenceScore": 1-10,
-  "clarityScore": 1-10,
-  "structureScore": 1-10,
-  "answerLogic": "string (incl. detected proficiency level)",
+  "confidenceScore": number,
+  "clarityScore": number,
+  "structureScore": number,
+  "answerLogic": "string",
   "strengths": ["string"],
   "weaknesses": ["string"],
-  "overallFeedback": "string (incl. explanation of polish choices)",
-  "idealAnswer": "string (the 10% refactored version)"
+  "overallFeedback": "string",
+  "idealAnswer": "string",
+  "starMethodUsed": boolean|null
 }`;
     let analysisText;
     // Models prioritized by user preference (1500 RPD tier)

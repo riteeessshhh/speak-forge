@@ -1,29 +1,12 @@
 /**
- * topics.js — The Topic Bank for Speak Forge
+ * topics.js — The Topic Bank for Speak Forge (Infinite Vault Edition)
  *
- * DATA STRUCTURE (v2 — with Difficulty Levels):
- * ──────────────────────────────────────────────
- * Still a hash-map keyed by track name for O(1) track lookup.
- * BUT each entry is now an OBJECT instead of a raw string:
- *
- *   { text: string, difficulty: "easy" | "medium" | "hard" }
- *
- * WHY this shape?
- *   → Track lookup is O(1): tracks["Interview Prep"]
- *   → Difficulty filtering is O(n) where n ≈ 30 — negligible.
- *   → We chain: tracks[track].filter(t => t.difficulty === diff)
- *   → "True Random" has its OWN array — not derived from other tracks.
- *
- * FILTERING STRATEGY (Derived State):
- *   We do NOT store filtered results in React state.
- *   Instead, we compute them on-the-fly during render:
- *     const pool = tracks[selectedTrack].filter(t => t.difficulty === selectedDifficulty);
- *   This avoids stale data bugs and keeps the state tree minimal.
+ * Total Topics: 450 (30 per Arena/Difficulty combination)
  */
 
 export const tracks = {
   "Interview Prep": [
-    // ── EASY: Common openers, low pressure ──
+    // ── EASY (30 Topics) ──
     { text: "Tell me about yourself and your background.", difficulty: "easy", isBehavioral: false },
     { text: "Why are you interested in this role?", difficulty: "easy", isBehavioral: false },
     { text: "What are your greatest strengths?", difficulty: "easy", isBehavioral: false },
@@ -34,8 +17,28 @@ export const tracks = {
     { text: "Where do you see yourself in five years?", difficulty: "easy", isBehavioral: false },
     { text: "What are you looking for in your next role?", difficulty: "easy", isBehavioral: false },
     { text: "Describe a typical day at your current or most recent job.", difficulty: "easy", isBehavioral: false },
+    { text: "What is your greatest professional achievement so far?", difficulty: "easy", isBehavioral: false },
+    { text: "How do you handle working under pressure?", difficulty: "easy", isBehavioral: false },
+    { text: "What do you consider your biggest weakness?", difficulty: "easy", isBehavioral: false },
+    { text: "Do you prefer working alone or in a team?", difficulty: "easy", isBehavioral: false },
+    { text: "How do you stay organized when managing multiple tasks?", difficulty: "easy", isBehavioral: false },
+    { text: "What are your salary expectations for this role?", difficulty: "easy", isBehavioral: false },
+    { text: "How do you handle conflict in the workplace?", difficulty: "easy", isBehavioral: false },
+    { text: "What is your preferred management style?", difficulty: "easy", isBehavioral: false },
+    { text: "What makes you a unique candidate for this position?", difficulty: "easy", isBehavioral: false },
+    { text: "How do you stay updated with industry trends?", difficulty: "easy", isBehavioral: false },
+    { text: "Tell me about a hobby you're passionate about.", difficulty: "easy", isBehavioral: false },
+    { text: "What is the most important thing you've learned in your career?", difficulty: "easy", isBehavioral: false },
+    { text: "Describe a time you had to learn something new quickly.", difficulty: "easy", isBehavioral: false },
+    { text: "What are your career goals for the next year?", difficulty: "easy", isBehavioral: false },
+    { text: "How do you handle feedback from colleagues?", difficulty: "easy", isBehavioral: false },
+    { text: "What is your favorite part about your current job?", difficulty: "easy", isBehavioral: false },
+    { text: "Why are you looking to leave your current company?", difficulty: "easy", isBehavioral: false },
+    { text: "What is your approach to work-life balance?", difficulty: "easy", isBehavioral: false },
+    { text: "How do you define success in a professional setting?", difficulty: "easy", isBehavioral: false },
+    { text: "Tell me about a time you worked in a high-performing team.", difficulty: "easy", isBehavioral: false },
 
-    // ── MEDIUM: STAR-method behavioral, require real stories ──
+    // ── MEDIUM (30 Topics) ──
     { text: "Tell me about a time you had to learn a new technology under a tight deadline.", difficulty: "medium", isBehavioral: true },
     { text: "Describe a project where you had to make a significant trade-off.", difficulty: "medium", isBehavioral: true },
     { text: "Tell me about a time you disagreed with a teammate. How did you resolve it?", difficulty: "medium", isBehavioral: true },
@@ -46,8 +49,28 @@ export const tracks = {
     { text: "Tell me about a time you automated a manual process. What was the impact?", difficulty: "medium", isBehavioral: true },
     { text: "Describe a situation where you had to collaborate across teams.", difficulty: "medium", isBehavioral: true },
     { text: "Tell me about a time you used data to make an important decision.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to explain a complex technical concept to a non-technical stakeholder.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you received constructive criticism. How did you react?", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a situation where you had to work with a difficult personality.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you noticed a process was inefficient and took the initiative to fix it.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a project that failed. What was your role and what did you learn?", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you had to adapt to a major change at work.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to manage multiple stakeholders with conflicting priorities.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you had to take lead on a project without being asked.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you were faced with a stressful situation that demonstrated your coping skills.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you made a mistake at work. How did you handle it?", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to work with very little supervision. How did you manage?", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you successfully persuaded someone to see things your way.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to resolve a conflict between two teammates.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you had to deliver bad news to a stakeholder or client.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to balance quality with speed to meet a deadline.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you contributed to a positive team culture.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to step outside of your comfort zone professionally.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you had to research and solve a problem you knew nothing about.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a time you had to manage your own workload during a very busy period.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you helped a colleague improve their performance.", difficulty: "medium", isBehavioral: true },
 
-    // ── HARD: Conflict, failure, leadership pressure ──
+    // ── HARD (30 Topics) ──
     { text: "Tell me about a time you failed on a project. What did you learn from it?", difficulty: "hard", isBehavioral: true },
     { text: "Tell me about a time you had to push back on your manager's decision.", difficulty: "hard", isBehavioral: true },
     { text: "Describe how you handle working on a codebase with massive technical debt.", difficulty: "hard", isBehavioral: true },
@@ -58,10 +81,30 @@ export const tracks = {
     { text: "Describe a time when you had to say no to a feature request from a senior stakeholder.", difficulty: "hard", isBehavioral: true },
     { text: "Tell me about leading a project where the scope changed dramatically mid-sprint.", difficulty: "hard", isBehavioral: true },
     { text: "Describe a time you had to persuade an entire team to adopt a new approach they resisted.", difficulty: "hard", isBehavioral: true },
+    { text: "How do you handle a teammate who is consistently underperforming but is a close friend?", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about an ethical dilemma you faced at work. How did you resolve it?", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to manage a project with high ambiguity and no clear roadmap.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to mentor someone who was struggling. What was the outcome?", difficulty: "hard", isBehavioral: true },
+    { text: "Describe how you balance long-term technical quality with short-term business pressure.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to take full responsibility for a team-wide failure.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to navigate a company-wide reorganization. How did you adapt?", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to lead a remote team across multiple time zones.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to build a technical team from scratch. What were your criteria?", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to negotiate a significant contract or partnership.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to manage a project that was sabotaged by internal politics.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to deliver a high-stakes presentation to executive leadership.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to manage a critical security breach. What was your process?", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to shut down a project you were personally invested in.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to manage a team through a period of low morale and burnout.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to align three different departments on a single technical goal.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to implement a controversial policy that the team hated.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to defend your team's reputation against unfair criticism.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to handle a legal or compliance issue in your software.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to lead a project that was critical to the company's survival.", difficulty: "hard", isBehavioral: true },
   ],
 
   "Tech & CS": [
-    // ── EASY: Definitions and basic concepts ──
+    // ── EASY (30 Topics) ──
     { text: "What is the difference between a stack and a queue?", difficulty: "easy" },
     { text: "Explain what an API is as if you're talking to a non-technical person.", difficulty: "easy" },
     { text: "What is the difference between HTTP and HTTPS?", difficulty: "easy" },
@@ -72,8 +115,28 @@ export const tracks = {
     { text: "Explain what an array is and when you would use one.", difficulty: "easy" },
     { text: "What does 'open source' mean and why does it matter?", difficulty: "easy" },
     { text: "Explain the concept of a variable in programming.", difficulty: "easy" },
+    { text: "What is the purpose of a CSS framework like Tailwind?", difficulty: "easy" },
+    { text: "Explain what a JSON object is and why it's used in web development.", difficulty: "easy" },
+    { text: "What is a 'Bug' and what are the general steps to fix one?", difficulty: "easy" },
+    { text: "Explain the concept of 'Responsive Design' to a business owner.", difficulty: "easy" },
+    { text: "What is a loop in programming? Give a real-world analogy.", difficulty: "easy" },
+    { text: "What is an IP address and why is it necessary?", difficulty: "easy" },
+    { text: "Explain the difference between a class and an object in OOP.", difficulty: "easy" },
+    { text: "What is a 'Null' value and why can it be dangerous?", difficulty: "easy" },
+    { text: "Explain what a 'Domain Name' is and how it relates to an IP address.", difficulty: "easy" },
+    { text: "What is the difference between a local and a global variable?", difficulty: "easy" },
+    { text: "Explain what a 'Cloud' is in the context of computing.", difficulty: "easy" },
+    { text: "What is 'Markdown' and why do developers use it for documentation?", difficulty: "easy" },
+    { text: "Explain the difference between 32-bit and 64-bit systems.", difficulty: "easy" },
+    { text: "What is an 'Operating System' and what are its core functions?", difficulty: "easy" },
+    { text: "Explain what a 'Function' is in programming and why we use them.", difficulty: "easy" },
+    { text: "What is 'Encryption' and why is it important for security?", difficulty: "easy" },
+    { text: "Explain the concept of 'Dry' (Don't Repeat Yourself).", difficulty: "easy" },
+    { text: "What is a 'File Extension' and what does it tell the computer?", difficulty: "easy" },
+    { text: "Explain what 'Big Data' means in simple terms.", difficulty: "easy" },
+    { text: "What is a 'String' in programming? Give an example.", difficulty: "easy" },
 
-    // ── MEDIUM: Systems, trade-offs, intermediate DSA ──
+    // ── MEDIUM (30 Topics) ──
     { text: "Explain how a hash map handles collisions and why that matters for performance.", difficulty: "medium" },
     { text: "Walk me through what happens when you type a URL into a browser and press Enter.", difficulty: "medium" },
     { text: "What is the difference between a process and a thread?", difficulty: "medium" },
@@ -84,8 +147,28 @@ export const tracks = {
     { text: "Describe how an event loop works in Node.js.", difficulty: "medium" },
     { text: "What is a REST API? How does it differ from GraphQL?", difficulty: "medium" },
     { text: "Explain recursion vs iteration. When is recursion a bad choice?", difficulty: "medium" },
+    { text: "What is CI/CD and how does it improve software quality?", difficulty: "medium" },
+    { text: "Explain the difference between JWT and Session-based authentication.", difficulty: "medium" },
+    { text: "Describe the 'Virtual DOM' and why React uses it.", difficulty: "medium" },
+    { text: "What is a Docker container? How is it different from a Virtual Machine?", difficulty: "medium" },
+    { text: "Explain the concept of 'Normalization' in databases.", difficulty: "medium" },
+    { text: "What is the difference between symmetric and asymmetric encryption?", difficulty: "medium" },
+    { text: "Explain how a Content Delivery Network (CDN) works.", difficulty: "medium" },
+    { text: "What is a 'Memory Leak' and how do you find one?", difficulty: "medium" },
+    { text: "Explain the difference between 'Shallow Copy' and 'Deep Copy'.", difficulty: "medium" },
+    { text: "What is 'Object-Relational Mapping' (ORM)? Give pros and cons.", difficulty: "medium" },
+    { text: "Explain the difference between a relational (SQL) and non-relational (NoSQL) database.", difficulty: "medium" },
+    { text: "What is the 'DNS' and how does the lookup process work?", difficulty: "medium" },
+    { text: "Explain 'Cross-Origin Resource Sharing' (CORS) and why it's a security feature.", difficulty: "medium" },
+    { text: "What is 'Dependency Injection' and why is it useful?", difficulty: "medium" },
+    { text: "Explain the 'Model-View-Controller' (MVC) architectural pattern.", difficulty: "medium" },
+    { text: "What is a 'Websocket' and how does it differ from traditional HTTP?", difficulty: "medium" },
+    { text: "Explain the concept of 'Lazy Loading' in web applications.", difficulty: "medium" },
+    { text: "What is 'SQL Injection' and how do you prevent it?", difficulty: "medium" },
+    { text: "Explain 'Inheritance' vs 'Composition' in OOP.", difficulty: "medium" },
+    { text: "What is a 'Race Condition' and how can it be avoided?", difficulty: "medium" },
 
-    // ── HARD: Distributed systems, advanced architecture ──
+    // ── HARD (30 Topics) ──
     { text: "Explain the CAP theorem as if you were teaching it to a non-technical PM.", difficulty: "hard" },
     { text: "What is consistent hashing and why is it used in distributed systems?", difficulty: "hard" },
     { text: "Describe how garbage collection works in a managed language. What are the trade-offs?", difficulty: "hard" },
@@ -96,10 +179,30 @@ export const tracks = {
     { text: "Explain the difference between monolithic and microservice architectures. When is each better?", difficulty: "hard" },
     { text: "Describe how a load balancer works and compare round-robin vs least-connections strategies.", difficulty: "hard" },
     { text: "What is a race condition? Give a real example and explain how to prevent it with locks.", difficulty: "hard" },
+    { text: "Design a URL shortening service like Bitly. How do you handle 100k requests per second?", difficulty: "hard" },
+    { text: "Explain 'Horizontal' vs 'Vertical' scaling with real-world infrastructure examples.", difficulty: "hard" },
+    { text: "Describe how SSL/TLS handshakes work to secure a connection.", difficulty: "hard" },
+    { text: "What is a Distributed Hash Table (DHT) and how does it enable peer-to-peer systems?", difficulty: "hard" },
+    { text: "Explain the concept of 'Idempotency' in API design and why it's critical for distributed systems.", difficulty: "hard" },
+    { text: "How does 'Two-Phase Commit' (2PC) work in distributed transactions? What are its flaws?", difficulty: "hard" },
+    { text: "Explain the 'Paxos' or 'Raft' consensus algorithms in simple terms.", difficulty: "hard" },
+    { text: "What is 'Database Sharding' and what are the challenges in maintaining a sharded cluster?", difficulty: "hard" },
+    { text: "Describe the 'LSM-Tree' vs 'B-Tree' for database storage engines. When to use which?", difficulty: "hard" },
+    { text: "Explain 'Sidecar' containers in a service mesh architecture like Istio.", difficulty: "hard" },
+    { text: "How do 'Vector Clocks' help resolve conflicts in distributed systems?", difficulty: "hard" },
+    { text: "Explain the difference between 'Strong Consistency' and 'Eventual Consistency'.", difficulty: "hard" },
+    { text: "What is 'Zero-Knowledge Proof' and how is it used in modern security?", difficulty: "hard" },
+    { text: "Describe how 'Garbage Collection' in Go differs from Java's JVM.", difficulty: "hard" },
+    { text: "Explain 'Bloom Filters' and their use cases in large-scale caching.", difficulty: "hard" },
+    { text: "What is 'TCP Slow Start' and how does it impact network latency?", difficulty: "hard" },
+    { text: "Describe the 'Actor Model' of concurrency. How does it compare to threads/locks?", difficulty: "hard" },
+    { text: "Explain 'Server-Side Rendering' (SSR) vs 'Static Site Generation' (SSG) in depth.", difficulty: "hard" },
+    { text: "What is 'Speculative Execution' and how did it lead to the Spectre vulnerability?", difficulty: "hard" },
+    { text: "Explain 'Homomorphic Encryption' and its potential for cloud privacy.", difficulty: "hard" },
   ],
 
   "Hot Takes": [
-    // ── EASY: Fun, low-stakes, everyone has an opinion ──
+    // ── EASY (30 Topics) ──
     { text: "Defend: 'Tabs are objectively superior to spaces.'", difficulty: "easy" },
     { text: "Defend: 'Dark mode is overrated and light mode is better for productivity.'", difficulty: "easy" },
     { text: "Defend: 'Copy-pasting code from the internet is a legitimate engineering skill.'", difficulty: "easy" },
@@ -110,8 +213,28 @@ export const tracks = {
     { text: "Defend: 'The best engineers are the ones who write the most code.'", difficulty: "easy" },
     { text: "Defend: 'Print debugging is superior to using a proper debugger.'", difficulty: "easy" },
     { text: "Defend: 'README files are optional for any project.'", difficulty: "easy" },
+    { text: "Defend: 'Every developer should learn to code on a laptop with a small screen.'", difficulty: "easy" },
+    { text: "Defend: 'Mechanical keyboards are purely aesthetic and don't help typing speed.'", difficulty: "easy" },
+    { text: "Defend: 'The most productive time to code is between 11 PM and 4 AM.'", difficulty: "easy" },
+    { text: "Defend: 'Commenting code is a sign of poorly written code.'", difficulty: "easy" },
+    { text: "Defend: 'A clean desk makes for a clean codebase.'", difficulty: "easy" },
+    { text: "Defend: 'Coffee is a better performance booster than any energy drink.'", difficulty: "easy" },
+    { text: "Defend: 'The best IDE is the one you customize for 10 hours before writing any code.'", difficulty: "easy" },
+    { text: "Defend: 'Every developer should use a standing desk.'", difficulty: "easy" },
+    { text: "Defend: 'Coding on a tablet is the future of mobile development.'", difficulty: "easy" },
+    { text: "Defend: 'Using a mouse is slower than using only keyboard shortcuts.'", difficulty: "easy" },
+    { text: "Defend: 'Screaming at your computer actually helps it run faster.'", difficulty: "easy" },
+    { text: "Defend: 'Physical whiteboards are better than any digital diagramming tool.'", difficulty: "easy" },
+    { text: "Defend: 'The best way to learn is by breaking things in production.'", difficulty: "easy" },
+    { text: "Defend: 'Every software engineer should also be a good writer.'", difficulty: "easy" },
+    { text: "Defend: 'Learning to type 100+ WPM is the best career hack for developers.'", difficulty: "easy" },
+    { text: "Defend: 'Taking a nap during the workday increases total output.'", difficulty: "easy" },
+    { text: "Defend: 'A developer's worth is directly tied to their GitHub green squares.'", difficulty: "easy" },
+    { text: "Defend: 'Using multiple monitors is a distraction, not a productivity booster.'", difficulty: "easy" },
+    { text: "Defend: 'The best documentation is a well-named variable.'", difficulty: "easy" },
+    { text: "Defend: 'Software engineering is more of an art than a science.'", difficulty: "easy" },
 
-    // ── MEDIUM: Requires nuanced reasoning ──
+    // ── MEDIUM (30 Topics) ──
     { text: "Defend: 'You don't need data structures and algorithms to be a good engineer.'", difficulty: "medium" },
     { text: "Defend: 'Unit tests are a waste of time and slow down development.'", difficulty: "medium" },
     { text: "Defend: 'Remote work is worse for productivity than in-office work.'", difficulty: "medium" },
@@ -122,8 +245,28 @@ export const tracks = {
     { text: "Defend: 'Code readability doesn't matter if the code is performant.'", difficulty: "medium" },
     { text: "Defend: 'Pair programming halves your team's output.'", difficulty: "medium" },
     { text: "Defend: 'Technical debt doesn't exist — it's just evolution.'", difficulty: "medium" },
+    { text: "Defend: 'Full-stack developers are just people who are mediocre at both front and back end.'", difficulty: "medium" },
+    { text: "Defend: 'Object-Oriented Programming (OOP) has done more harm than good to software quality.'", difficulty: "medium" },
+    { text: "Defend: 'Managers should be the ones who write the final technical specifications, not engineers.'", difficulty: "medium" },
+    { text: "Defend: 'A company with no legacy code is a company that hasn't survived long enough.'", difficulty: "medium" },
+    { text: "Defend: 'The best architectural pattern is the one you can build the fastest, regardless of scale.'", difficulty: "medium" },
+    { text: "Defend: 'Monoliths are better than microservices for 99% of companies.'", difficulty: "medium" },
+    { text: "Defend: 'TypeScript is just adding overhead to a language that was designed to be simple.'", difficulty: "medium" },
+    { text: "Defend: 'Serverless is just a way to make your infrastructure more expensive and harder to debug.'", difficulty: "medium" },
+    { text: "Defend: 'The best way to hire is through a 4-hour live coding session.'", difficulty: "medium" },
+    { text: "Defend: 'Code coverage metrics are a useless management vanity metric.'", difficulty: "medium" },
+    { text: "Defend: 'No-code tools will eventually replace 50% of professional developers.'", difficulty: "medium" },
+    { text: "Defend: 'React has made web development unnecessarily complex.'", difficulty: "medium" },
+    { text: "Defend: 'SQL is the most perfect language ever created.'", difficulty: "medium" },
+    { text: "Defend: 'Every company should be a remote-first company.'", difficulty: "medium" },
+    { text: "Defend: 'Working at a startup is always better for your career than working at a Big Tech company.'", difficulty: "medium" },
+    { text: "Defend: 'The most important skill for an engineer is empathy, not technical ability.'", difficulty: "medium" },
+    { text: "Defend: 'Most developers spend too much time over-engineering simple problems.'", difficulty: "medium" },
+    { text: "Defend: 'Standardizing on one language (like JS) for the whole stack is always the right choice.'", difficulty: "medium" },
+    { text: "Defend: 'Junior developers should not be allowed to touch production code for at least 6 months.'", difficulty: "medium" },
+    { text: "Defend: 'Technical interviews should focus on soft skills more than coding.'", difficulty: "medium" },
 
-    // ── HARD: Provocative, requires argument construction ──
+    // ── HARD (30 Topics) ──
     { text: "Defend: 'AI will completely replace software engineers within 5 years.'", difficulty: "hard" },
     { text: "Defend: 'A CS degree is completely useless for modern software development.'", difficulty: "hard" },
     { text: "Defend: 'Working 80-hour weeks is the best way to advance your career.'", difficulty: "hard" },
@@ -134,10 +277,30 @@ export const tracks = {
     { text: "Defend: 'You should always build everything from scratch instead of using libraries.'", difficulty: "hard" },
     { text: "Defend: 'You should never refactor code that's already working in production.'", difficulty: "hard" },
     { text: "Defend: 'The best code is code written without any planning or design documents.'", difficulty: "hard" },
+    { text: "Defend: 'Open source software is a security risk that most enterprises shouldn't take.'", difficulty: "hard" },
+    { text: "Defend: 'The term \"Senior Engineer\" is purely based on years of experience, not skill.'", difficulty: "hard" },
+    { text: "Defend: 'Proprietary software is morally superior to open source because it funds innovation.'", difficulty: "hard" },
+    { text: "Defend: 'Code reviews are a form of gatekeeping that prevents speed and innovation.'", difficulty: "hard" },
+    { text: "Defend: 'Standardizing on a single tech stack across an entire industry would be better for progress.'", difficulty: "hard" },
+    { text: "Defend: 'The internet should be a paid utility with no free access to anything.'", difficulty: "hard" },
+    { text: "Defend: 'User privacy is a myth and companies shouldn't waste time trying to protect it.'", difficulty: "hard" },
+    { text: "Defend: 'A single global AI should manage all world governments.'", difficulty: "hard" },
+    { text: "Defend: 'Profit is the only metric that matters in software development.'", difficulty: "hard" },
+    { text: "Defend: 'Technical debt is actually a sign of a fast-moving and successful company.'", difficulty: "hard" },
+    { text: "Defend: 'Programmers should be legally liable for bugs in their code.'", difficulty: "hard" },
+    { text: "Defend: 'The best engineering culture is one based on pure meritocracy and high competition.'", difficulty: "hard" },
+    { text: "Defend: 'Companies should be allowed to sell user data without explicit consent.'", difficulty: "hard" },
+    { text: "Defend: 'The Silicon Valley model of growth at all costs is the best for humanity.'", difficulty: "hard" },
+    { text: "Defend: 'Diversity in tech is a distraction from technical excellence.'", difficulty: "hard" },
+    { text: "Defend: 'The future of software is 100% cloud-based; local hardware will eventually disappear.'", difficulty: "hard" },
+    { text: "Defend: 'Blockchain is the most important invention since the internet.'", difficulty: "hard" },
+    { text: "Defend: 'Automated testing can never replace manual testing for quality.'", difficulty: "hard" },
+    { text: "Defend: 'Every company should have a mandatory retirement age for software engineers.'", difficulty: "hard" },
+    { text: "Defend: 'Building your own personal brand is more important than being a good engineer.'", difficulty: "hard" },
   ],
 
   "Creative Pitch": [
-    // ── EASY: Simple, fun product ideas ──
+    // ── EASY (30 Topics) ──
     { text: "Pitch a mobile app that helps people find study partners near them.", difficulty: "easy" },
     { text: "Pitch a product that gamifies household chores for families.", difficulty: "easy" },
     { text: "Pitch yourself for a software engineering role in 60 seconds.", difficulty: "easy" },
@@ -148,8 +311,28 @@ export const tracks = {
     { text: "Pitch a browser extension that blocks distracting websites during work hours.", difficulty: "easy" },
     { text: "Pitch a neighborhood tool-sharing app to reduce waste.", difficulty: "easy" },
     { text: "Pitch yourself as a freelance developer to a potential client.", difficulty: "easy" },
+    { text: "Pitch a pet-sitting app for unconventional animals like lizards or birds.", difficulty: "easy" },
+    { text: "Pitch a smart water bottle that tracks hydration and glows when you're thirsty.", difficulty: "easy" },
+    { text: "Pitch a subscription service for mystery books tailored to your taste.", difficulty: "easy" },
+    { text: "Pitch a localized news app that only shows stories within a 1-mile radius.", difficulty: "easy" },
+    { text: "Pitch a gadget that perfectly slices avocados every single time.", difficulty: "easy" },
+    { text: "Pitch an app that helps you find the best public restrooms in a city.", difficulty: "easy" },
+    { text: "Pitch a smart plant pot that tells you exactly what nutrients your plant needs.", difficulty: "easy" },
+    { text: "Pitch a coffee subscription service that only features beans from small, independent farms.", difficulty: "easy" },
+    { text: "Pitch a wearable device that tracks your posture and vibrates when you slouch.", difficulty: "easy" },
+    { text: "Pitch a social media platform where you can only post one photo a week.", difficulty: "easy" },
+    { text: "Pitch an app that connects people who want to share a ride to the airport.", difficulty: "easy" },
+    { text: "Pitch a service that delivers healthy, pre-made meals for pets.", difficulty: "easy" },
+    { text: "Pitch a smart alarm clock that won't stop ringing until you solve a math puzzle.", difficulty: "easy" },
+    { text: "Pitch a mobile game that teaches kids how to manage money.", difficulty: "easy" },
+    { text: "Pitch a browser extension that automatically finds the lowest price for any item.", difficulty: "easy" },
+    { text: "Pitch a neighborhood 'Library of Things' where people can rent tools and appliances.", difficulty: "easy" },
+    { text: "Pitch a smart mirror that helps you choose an outfit based on the weather.", difficulty: "easy" },
+    { text: "Pitch an app that tracks your carbon footprint based on your purchases.", difficulty: "easy" },
+    { text: "Pitch a service that organizes surprise weekend trips for adventurous travelers.", difficulty: "easy" },
+    { text: "Pitch a smart trash can that automatically sorts your recycling.", difficulty: "easy" },
 
-    // ── MEDIUM: Requires market thinking and structure ──
+    // ── MEDIUM (30 Topics) ──
     { text: "You have 60 seconds to convince an investor to fund a developer productivity tool.", difficulty: "medium" },
     { text: "Pitch an AI-powered browser extension that summarizes Terms of Service pages.", difficulty: "medium" },
     { text: "Pitch a SaaS product that automates weekly standup meetings.", difficulty: "medium" },
@@ -160,8 +343,28 @@ export const tracks = {
     { text: "Pitch a tool that automatically generates API documentation from code comments.", difficulty: "medium" },
     { text: "Pitch a smart home device that helps elderly people live independently.", difficulty: "medium" },
     { text: "Explain to a board of directors why investing in developer experience improves revenue.", difficulty: "medium" },
+    { text: "Pitch a 'Rent-a-Crowd' service for small protests or celebrations.", difficulty: "medium" },
+    { text: "Pitch a logistics platform for vertical farming in urban centers.", difficulty: "medium" },
+    { text: "Pitch a personalized AI-tutor for kids that adapts to their learning style.", difficulty: "medium" },
+    { text: "Pitch a zero-waste grocery delivery service using reusable containers.", difficulty: "medium" },
+    { text: "Pitch a platform for micro-consulting where experts get paid by the minute.", difficulty: "medium" },
+    { text: "Pitch a subscription-based health clinic for low-income communities.", difficulty: "medium" },
+    { text: "Pitch a smart irrigation system for small-scale farmers.", difficulty: "medium" },
+    { text: "Pitch an AI-driven tool that helps companies reduce their energy consumption.", difficulty: "medium" },
+    { text: "Pitch a localized crowdfunding platform for community projects.", difficulty: "medium" },
+    { text: "Pitch a service that helps people legally and safely dispose of electronic waste.", difficulty: "medium" },
+    { text: "Pitch a smart home security system that uses drone surveillance.", difficulty: "medium" },
+    { text: "Pitch an app that uses AR to help you visualize furniture in your home before you buy.", difficulty: "medium" },
+    { text: "Pitch a platform for peer-to-peer insurance for specialized hobbies.", difficulty: "medium" },
+    { text: "Pitch a smart wearable that monitors blood sugar levels non-invasively.", difficulty: "medium" },
+    { text: "Pitch an AI-powered personal stylist that curates outfits based on your current wardrobe.", difficulty: "medium" },
+    { text: "Pitch a decentralized energy grid for small neighborhoods.", difficulty: "medium" },
+    { text: "Pitch an automated system for tracking and reducing food waste in commercial kitchens.", difficulty: "medium" },
+    { text: "Pitch a service that provides personalized career coaching using AI.", difficulty: "medium" },
+    { text: "Pitch a platform that connects small businesses with local, sustainable suppliers.", difficulty: "medium" },
+    { text: "Pitch a smart wearable for athletes that provides real-time feedback on their form.", difficulty: "medium" },
 
-    // ── HARD: Strategic pivots, complex arguments ──
+    // ── HARD (30 Topics) ──
     { text: "Explain your senior project as if pitching it to a top-tier VC for Series A funding.", difficulty: "hard" },
     { text: "Pitch a decentralized social media platform focused on privacy to a skeptical board.", difficulty: "hard" },
     { text: "Explain why your startup should pivot from B2C to B2B in 60 seconds.", difficulty: "hard" },
@@ -172,10 +375,30 @@ export const tracks = {
     { text: "Pitch an automated code migration tool for legacy codebases to enterprise clients.", difficulty: "hard" },
     { text: "Pitch a non-profit tech initiative teaching coding to underserved communities — to a government committee.", difficulty: "hard" },
     { text: "Explain in 60 seconds why companies should invest heavily in accessibility over new features.", difficulty: "hard" },
+    { text: "Pitch a lunar-mining startup to a group of billionaire investors.", difficulty: "hard" },
+    { text: "Pitch a carbon-capture technology that can be installed on regular cars.", difficulty: "hard" },
+    { text: "Convince a bank to replace their entire legacy core banking system with a blockchain solution.", difficulty: "hard" },
+    { text: "Pitch a universal basic income model funded entirely by AI-generated wealth.", difficulty: "hard" },
+    { text: "Pitch an orbital waste collection service to clean up space debris.", difficulty: "hard" },
+    { text: "Pitch a global ocean-cleaning initiative to the United Nations.", difficulty: "hard" },
+    { text: "Convince a government to transition their entire energy grid to 100% nuclear power.", difficulty: "hard" },
+    { text: "Pitch a transhumanist startup focused on brain-computer interfaces for cognitive enhancement.", difficulty: "hard" },
+    { text: "Explain how your AI startup will maintain ethical standards while maximizing profit.", difficulty: "hard" },
+    { text: "Pitch a vertical city design to a group of urban planners and investors.", difficulty: "hard" },
+    { text: "Convince a major tech company to open-source their most valuable proprietary algorithm.", difficulty: "hard" },
+    { text: "Pitch a new type of school that replaces traditional education with project-based learning.", difficulty: "hard" },
+    { text: "Explain why a country should adopt a completely digital currency issued by its central bank.", difficulty: "hard" },
+    { text: "Pitch a startup that uses drones for high-speed, long-distance organ delivery.", difficulty: "hard" },
+    { text: "Convince a skeptical board of directors to invest in a completely autonomous cargo ship fleet.", difficulty: "hard" },
+    { text: "Pitch a global, real-time climate monitoring system to an international summit.", difficulty: "hard" },
+    { text: "Explain how your startup will use AI to solve the problem of antibiotic resistance.", difficulty: "hard" },
+    { text: "Pitch a high-speed underground transportation system between major European cities.", difficulty: "hard" },
+    { text: "Convince a major pharmaceutical company to make their life-saving drugs affordable in developing nations.", difficulty: "hard" },
+    { text: "Pitch an AI-driven global resource management system to prevent future shortages.", difficulty: "hard" },
   ],
 
   "True Random": [
-    // ── EASY: Fun everyday questions ──
+    // ── EASY (30 Topics) ──
     { text: "Why is water wet? Build a convincing argument.", difficulty: "easy" },
     { text: "If animals could talk, which species would be the rudest?", difficulty: "easy" },
     { text: "Pitch a new holiday. What's it called, when is it, and how do people celebrate?", difficulty: "easy" },
@@ -186,8 +409,28 @@ export const tracks = {
     { text: "Is a hotdog a sandwich? Defend your position.", difficulty: "easy" },
     { text: "If you could have dinner with any fictional character, who and why?", difficulty: "easy" },
     { text: "Describe your life using only movie titles.", difficulty: "easy" },
+    { text: "What is the most useless object in your house? Defend its existence.", difficulty: "easy" },
+    { text: "If you were a type of fruit, which one would you be and why?", difficulty: "easy" },
+    { text: "Which historical figure would be the best at TikTok?", difficulty: "easy" },
+    { text: "If you could change the sound your car horn makes, what would it be?", difficulty: "easy" },
+    { text: "Describe a color to someone who has never seen it.", difficulty: "easy" },
+    { text: "What would the perfect sandwich consist of? Defend your ingredients.", difficulty: "easy" },
+    { text: "If you could only eat one food for the rest of your life, what would it be and why?", difficulty: "easy" },
+    { text: "What is the best way to eat a pizza? Argue for your method.", difficulty: "easy" },
+    { text: "If you could have any mythical creature as a pet, what would it be?", difficulty: "easy" },
+    { text: "What's the best piece of advice you've ever received?", difficulty: "easy" },
+    { text: "If you could travel anywhere in the world right now, where would you go and why?", difficulty: "easy" },
+    { text: "What is the most underrated movie or TV show? Convince me to watch it.", difficulty: "easy" },
+    { text: "If you could meet your future self, what one question would you ask?", difficulty: "easy" },
+    { text: "What is the best way to spend a rainy Sunday afternoon?", difficulty: "easy" },
+    { text: "If you could change your name, what would you change it to and why?", difficulty: "easy" },
+    { text: "What is your favorite memory from childhood?", difficulty: "easy" },
+    { text: "If you could learn any language instantly, which one would it be and why?", difficulty: "easy" },
+    { text: "What is the most interesting thing you've learned recently?", difficulty: "easy" },
+    { text: "If you could have any talent in the world, what would it be?", difficulty: "easy" },
+    { text: "Describe your dream vacation in 60 seconds.", difficulty: "easy" },
 
-    // ── MEDIUM: Requires structured improvisation ──
+    // ── MEDIUM (30 Topics) ──
     { text: "You've been appointed the Minister of Fun. What's your first policy?", difficulty: "medium" },
     { text: "Convince a room of people that the best superpower is the ability to talk to plants.", difficulty: "medium" },
     { text: "Design a school subject that doesn't exist yet. What would students learn?", difficulty: "medium" },
@@ -198,8 +441,28 @@ export const tracks = {
     { text: "You are a defense attorney for the villain in a fairy tale. Make your closing argument.", difficulty: "medium" },
     { text: "If time travel were real, pitch a time-travel tourism company.", difficulty: "medium" },
     { text: "Describe what a day in your life looks like in the year 2085.", difficulty: "medium" },
+    { text: "If you could swap lives with any animal for 24 hours, which would it be and why?", difficulty: "medium" },
+    { text: "Explain the concept of 'Music' to an alien species that doesn't have ears.", difficulty: "medium" },
+    { text: "Build a case for why we should replace all currency with high-fives.", difficulty: "medium" },
+    { text: "You are a cloud. Describe your journey across the sky today.", difficulty: "medium" },
+    { text: "If you could merge two animals together to create a new pet, which two would you pick?", difficulty: "medium" },
+    { text: "If you could live in any fictional world (book, movie, game), which would it be and why?", difficulty: "medium" },
+    { text: "Explain the concept of 'Friendship' to a robot.", difficulty: "medium" },
+    { text: "Build an argument for why the sky is actually purple, not blue.", difficulty: "medium" },
+    { text: "If you were a ghost, who would you haunt and what would you do?", difficulty: "medium" },
+    { text: "Describe the perfect planet from scratch. What's the atmosphere, the life, the geography?", difficulty: "medium" },
+    { text: "If you were the first person on Mars, what would your first words be?", difficulty: "medium" },
+    { text: "Build a case for why humans should stop wearing shoes.", difficulty: "medium" },
+    { text: "If you could talk to your 10-year-old self, what would you say?", difficulty: "medium" },
+    { text: "Describe the smell of 'Happiness' in detail.", difficulty: "medium" },
+    { text: "If you could change one thing about the human body, what would it be and why?", difficulty: "medium" },
+    { text: "Convince me that the world would be better if we all lived under the ocean.", difficulty: "medium" },
+    { text: "If you could have any job in a medieval kingdom, what would it be and why?", difficulty: "medium" },
+    { text: "Describe a new sport that combines three existing sports. What are the rules?", difficulty: "medium" },
+    { text: "If you could create a new flavor of ice cream, what would it be and what's its name?", difficulty: "medium" },
+    { text: "Explain how to ride a bicycle to someone who has never seen one.", difficulty: "medium" },
 
-    // ── HARD: Philosophical, abstract, deep thinking ──
+    // ── HARD (30 Topics) ──
     { text: "If you could change one decision in human history, what would it be and what are the second-order effects?", difficulty: "hard" },
     { text: "Make a compelling argument that boredom is the most important human emotion.", difficulty: "hard" },
     { text: "If every job paid the same salary, what would society look like in 50 years?", difficulty: "hard" },
@@ -210,18 +473,29 @@ export const tracks = {
     { text: "If we discovered that the universe is a simulation, how should society respond?", difficulty: "hard" },
     { text: "Argue that the invention of the internet has done more harm than good to humanity.", difficulty: "hard" },
     { text: "Design a perfect city from scratch. What are your three non-negotiable principles?", difficulty: "hard" },
+    { text: "If you could live forever but never meet anyone new again, would you? Why?", difficulty: "hard" },
+    { text: "Is it possible to have a truly original thought in the modern age? Argue your side.", difficulty: "hard" },
+    { text: "If we found a way to stop aging, should it be mandatory for everyone or banned entirely?", difficulty: "hard" },
+    { text: "Argue that the most important quality of a leader is their ability to admit they are wrong.", difficulty: "hard" },
+    { text: "If you could see 10 minutes into your own future at any time, how would you use it?", difficulty: "hard" },
+    { text: "Is it possible to be truly altruistic, or is every act ultimately selfish? Argue your point.", difficulty: "hard" },
+    { text: "If we discovered a way to communicate with animals, how would it change our legal system?", difficulty: "hard" },
+    { text: "Build a case for why the concept of 'Work' will be obsolete in 100 years.", difficulty: "hard" },
+    { text: "If we could prove the existence of an afterlife, how would it change human behavior on Earth?", difficulty: "hard" },
+    { text: "Argue that the pursuit of perfection is a dangerous psychological trap.", difficulty: "hard" },
+    { text: "Design a new language from scratch. What are its three most unique features?", difficulty: "hard" },
+    { text: "If you had to choose between saving one human child or an entire species of animal, what would you pick and why?", difficulty: "hard" },
+    { text: "Argue for why we should completely abandon the concept of national borders.", difficulty: "hard" },
+    { text: "If we could delete one emotion from the human experience, which should it be and what would be the result?", difficulty: "hard" },
+    { text: "Is it better to live a short, high-impact life or a long, quiet, and comfortable one?", difficulty: "hard" },
+    { text: "If you could have a conversation with the personification of 'Time', what would you ask?", difficulty: "hard" },
+    { text: "Design a method for choosing world leaders that doesn't involve voting or inheritance.", difficulty: "hard" },
+    { text: "If we could experience other people's memories directly, how would it change the concept of empathy?", difficulty: "hard" },
+    { text: "Argue that true freedom is only possible if you have absolutely no responsibilities.", difficulty: "hard" },
+    { text: "If you were to create a new sense for the human body, what would it perceive and why?", difficulty: "hard" },
   ],
 };
 
-/**
- * TRACK_META — UI metadata for each track.
- *
- * Separated from topic data so the data file stays testable
- * and the UI layer can evolve independently.
- *
- * The `icon` field maps to a Lucide icon name (resolved in the component).
- * `color` is used for accent color in various UI states.
- */
 export const TRACK_META = {
   "Interview Prep": {
     description: "Behavioral & HR questions from easy icebreakers to tough conflict scenarios.",
@@ -260,32 +534,16 @@ export const TRACK_META = {
   },
 };
 
-/**
- * DIFFICULTY_META — metadata for difficulty pills.
- * Used by the DifficultySelector component for colors and labels.
- */
 export const DIFFICULTY_META = {
   easy: { label: "Easy", color: "emerald", emoji: "🌱" },
   medium: { label: "Medium", color: "amber", emoji: "⚡" },
   hard: { label: "Hard", color: "rose", emoji: "🔥" },
 };
 
-/**
- * getRandomTopic(trackName, difficulty)
- *
- * DERIVED STATE PATTERN:
- * This function computes the filtered pool on-the-fly.
- * We never store filtered results — we derive them from
- * the source data + the user's current selections.
- *
- * Returns { track, topic, difficulty } so the UI knows everything
- * about the generated result.
- */
 export function getRandomTopic(trackName, difficulty) {
   const trackTopics = tracks[trackName];
   if (!trackTopics) return null;
 
-  // Filter by difficulty — O(n) where n ≈ 30, negligible
   const pool = trackTopics.filter((t) => t.difficulty === difficulty);
   if (pool.length === 0) return null;
 
@@ -293,12 +551,6 @@ export function getRandomTopic(trackName, difficulty) {
   return { track: trackName, topic: chosen.text, difficulty: chosen.difficulty, isBehavioral: chosen.isBehavioral || false };
 }
 
-/**
- * getTopicCount(trackName, difficulty)
- *
- * Utility to show how many topics match the current filter.
- * Used by the UI to display "12 topics available" text.
- */
 export function getTopicCount(trackName, difficulty) {
   const trackTopics = tracks[trackName];
   if (!trackTopics) return 0;

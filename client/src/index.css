@@ -53,6 +53,16 @@ body {
   background: #3f3f46;
 }
 
+/* ── Browser Autofill Overrides ── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #09090b inset !important;
+  -webkit-text-fill-color: #fafafa !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 /* ══════════════════════════════════════
    KEYFRAME ANIMATIONS
    ══════════════════════════════════════ */

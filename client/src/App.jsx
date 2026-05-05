@@ -2,12 +2,13 @@
  * App.jsx — Production-Ready SpeakForge
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { 
   Building2, Cpu, Flame, Rocket, Shuffle, Sparkles, Mic, 
   ChevronRight, RotateCcw, Square, BarChart3, LogOut, 
-  Loader2, Play, CheckCircle2, History 
+  Loader2, Play, CheckCircle2, History, X, ArrowLeft
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
 import { getRandomTopic, getTopicCount } from "./data/topics";
 import CountdownTimer from "./components/CountdownTimer";
@@ -16,6 +17,7 @@ import { UserProvider, useAuth } from "./contexts/UserContext";
 import AuthView from "./components/AuthView";
 import Dashboard from "./components/Dashboard";
 import AudioVisualizer from "./components/AudioVisualizer";
+import AudioPlayer from "./components/AudioPlayer";
 import Skeleton, { SkeletonText } from "./components/Skeleton";
 
 /* ── Card data ── */
@@ -27,7 +29,8 @@ const arenaCards = [
     title: "Interview Prep",
     description: "Behavioral & HR questions from easy icebreakers to tough conflict scenarios.",
     color: "bg-emerald-500",
-    hoverBorder: "hover:border-emerald-500/50",
+    shadowColor: "shadow-emerald-500/10",
+    ringColor: "ring-emerald-500/50",
   },
   {
     id: "tech",
@@ -36,7 +39,8 @@ const arenaCards = [
     title: "Tech & CS",
     description: "Data structures, algorithms, systems design, and networking fundamentals.",
     color: "bg-pink-500",
-    hoverBorder: "hover:border-pink-500/50",
+    shadowColor: "shadow-pink-500/10",
+    ringColor: "ring-pink-500/50",
   },
   {
     id: "hottakes",
@@ -45,7 +49,8 @@ const arenaCards = [
     title: "Hot Takes",
     description: "Defend the indefensible. Practice thinking on your feet under pressure.",
     color: "bg-rose-500",
-    hoverBorder: "hover:border-rose-500/50",
+    shadowColor: "shadow-rose-500/10",
+    ringColor: "ring-rose-500/50",
   },
   {
     id: "pitch",
@@ -54,7 +59,8 @@ const arenaCards = [
     title: "Creative Pitch",
     description: "Sell an idea, a product, or yourself to investors in 60 seconds flat.",
     color: "bg-orange-500",
-    hoverBorder: "hover:border-orange-500/50",
+    shadowColor: "shadow-orange-500/10",
+    ringColor: "ring-orange-500/50",
   },
   {
     id: "random",
@@ -63,17 +69,36 @@ const arenaCards = [
     title: "True Random",
     description: "Bizarre, philosophical, and everyday impromptu questions. Expect chaos.",
     color: "bg-violet-500",
-    hoverBorder: "hover:border-violet-500/50",
+    shadowColor: "shadow-violet-500/10",
+    ringColor: "ring-violet-500/50",
   },
 ];
 
 const difficulties = [
-  { key: "easy",   label: "Easy",   emoji: "🌱", color: "text-emerald-400", bgHover: "hover:bg-emerald-500/10", borderHover: "hover:border-emerald-500/50" },
-  { key: "medium", label: "Medium", emoji: "⚡",  color: "text-amber-400",   bgHover: "hover:bg-amber-500/10",   borderHover: "hover:border-amber-500/50" },
-  { key: "hard",   label: "Hard",   emoji: "🔥",  color: "text-rose-400",    bgHover: "hover:bg-rose-500/10",    borderHover: "hover:border-rose-500/50" },
+  { key: "easy",   label: "Easy",   emoji: "🌱", color: "text-emerald-400", activeBg: "bg-emerald-500/10", border: "border-emerald-500/50", bgHover: "hover:bg-emerald-500/5" },
+  { key: "medium", label: "Medium", emoji: "⚡",  color: "text-amber-400",   activeBg: "bg-amber-500/10",   border: "border-amber-500/50",   bgHover: "hover:bg-amber-500/5" },
+  { key: "hard",   label: "Hard",   emoji: "🔥",  color: "text-rose-400",    activeBg: "bg-rose-500/10",    border: "border-rose-500/50",    bgHover: "hover:bg-rose-500/5" },
 ];
 
 const PREP_DURATION = 30;
+
+function HeaderButton({ onClick, icon: Icon, label, isActive, variant = "secondary" }) {
+  const isPrimary = variant === "primary";
+  
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer text-xs ${
+        isPrimary
+          ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-semibold border-transparent shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:scale-105 active:scale-95"
+          : "bg-transparent text-zinc-500 hover:text-zinc-300 border-zinc-800 hover:bg-zinc-800/30 font-medium active:scale-95"
+      }`}
+    >
+      <Icon className={`w-3.5 h-3.5 ${isPrimary ? "stroke-[2.5px]" : "stroke-[1.5px]"}`} />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
 
 /* ══════ Root Export ══════ */
 export default function App() {
@@ -106,12 +131,76 @@ function AppContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [showDashboard, setShowDashboard] = useState(false);
+  const isSessionActive = ["thinking", "recording", "review"].includes(phase);
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const { status, isRecording, audioUrl, audioBlob, stream, startRecording, stopRecording, clearAudio } = useAudioRecorder();
 
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+  const loadingTexts = ["Analyzing Audio...", "Checking Clarity...", "Generating Insights...", "Forging Feedback..."];
+  
+  const [recordingTime, setRecordingTime] = useState(0);
+  const recordingIntervalRef = useRef(null);
+
   const canGenerate = selectedArena !== null && selectedDifficulty !== null;
   const selectedCard = arenaCards.find((c) => c.id === selectedArena);
+
+  /* ── Loading State Logic ── */
+  useEffect(() => {
+    let textInterval;
+    let progressTimer;
+
+    if (isAnalyzing) {
+      setAnalysisProgress(10);
+      textInterval = setInterval(() => {
+        setLoadingTextIndex((prev) => (prev + 1) % loadingTexts.length);
+      }, 2000);
+
+      progressTimer = setTimeout(() => {
+        setAnalysisProgress(90);
+      }, 3000);
+    } else {
+      setAnalysisProgress(0);
+      setLoadingTextIndex(0);
+    }
+
+    return () => {
+      clearInterval(textInterval);
+      clearTimeout(progressTimer);
+    };
+  }, [isAnalyzing]);
+
+  /* ── Recording Timer Logic ── */
+  useEffect(() => {
+    if (phase === "recording") {
+      setRecordingTime(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      clearInterval(recordingIntervalRef.current);
+    }
+    return () => clearInterval(recordingIntervalRef.current);
+  }, [phase]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  /* ── Navigation Guard ── */
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isSessionActive) {
+        e.preventDefault();
+        e.returnValue = "Leaving now will reset your current challenge. Continue?";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isSessionActive]);
 
   /* ── Handlers ── */
   const handleArenaSelect = (id) => {
@@ -259,118 +348,175 @@ function AppContent() {
   if (!isAuthenticated) return <AuthView />;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col selection:bg-violet-500/30">
-      <div className="fixed top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-600 via-emerald-500 to-sky-500 z-50" />
+    <div className="lg:h-screen lg:overflow-hidden bg-zinc-950 text-white flex flex-col selection:bg-violet-500/30">
+      {/* Top Progress Bar */}
+      <div 
+        className="fixed top-0 left-0 h-0.5 bg-gradient-to-r from-violet-600 via-emerald-500 to-sky-500 z-50 transition-all duration-1000 ease-out" 
+        style={{ width: isAnalyzing ? `${analysisProgress}%` : "100%", opacity: isAnalyzing ? 1 : 0 }}
+      />
 
       {/* Header */}
-      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-[1200px] mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center glow-primary">
-              <Mic className="w-5 h-5 text-violet-400" />
+      <header className="border-b border-zinc-800/50 px-4 lg:px-6 py-3 flex items-center justify-between bg-zinc-950/50 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center gap-3 lg:gap-6">
+          <div className="flex items-center gap-2 cursor-pointer flex-shrink-0" onClick={handleReset}>
+            <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center glow-primary">
+              <Mic className="w-4 h-4 text-violet-400" />
             </div>
-            <span className="text-xl font-black tracking-tighter">SpeakForge</span>
+            <span className="text-lg font-black tracking-tighter">SpeakForge</span>
           </div>
-          
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setShowDashboard(!showDashboard)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-standard cursor-pointer ${
-                showDashboard
-                  ? "bg-violet-500/10 text-violet-400 border border-violet-500/20"
-                  : "text-zinc-400 hover:text-white border border-transparent"
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Dashboard</span>
-            </button>
-            <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
-            <button onClick={logout} className="p-2 text-zinc-500 hover:text-rose-400 transition-standard cursor-pointer">
-              <LogOut className="w-5 h-5" />
-            </button>
+
+          {isSessionActive && (
+            <>
+              <div className="h-4 w-[1px] bg-zinc-800 mx-1 hidden sm:block" />
+                <button
+                  onClick={handleReset}
+                  className="group flex items-center justify-center gap-2 ml-4 lg:ml-0 w-10 h-10 lg:w-auto lg:h-auto text-zinc-500 hover:text-zinc-200 transition-colors text-[11px] font-medium uppercase tracking-[0.1em] cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4 lg:w-3.5 lg:h-3.5 transition-transform group-hover:-translate-x-0.5" />
+                  <span className="hidden sm:inline">Exit Session</span>
+                </button>
+              </>
+            )}
           </div>
-        </div>
-      </header>
+            
+            <div className="flex items-center gap-3">
+              {!isSessionActive ? (
+                <>
+                  <HeaderButton 
+                    onClick={() => setShowDashboard(!showDashboard)}
+                    icon={BarChart3}
+                    label="Analytics"
+                    variant="primary"
+                  />
+                  
+                  <HeaderButton 
+                    onClick={logout}
+                    icon={LogOut}
+                    label="Logout"
+                    variant="secondary"
+                  />
+                </>
+              ) : (
+                <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 text-violet-400 text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                  <span className="hidden sm:inline">Session Active</span>
+                </div>
+              )}
+            </div>
+        </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col px-6 py-10 lg:py-16 overflow-y-auto">
-        <div className="max-w-[1200px] w-full mx-auto flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col px-4 lg:px-8 py-6 mt-4 lg:mt-0 lg:pt-6 lg:pb-12 overflow-y-auto lg:overflow-hidden">
+        <div className="max-w-7xl w-full mx-auto flex-1 flex flex-col min-h-0">
           {showDashboard ? (
             <Dashboard onBack={() => setShowDashboard(false)} />
           ) : (
             <>
               {/* PHASE: SELECTION */}
               {phase === "selection" && (
-                <div className="animate-fade-in-up space-y-12">
-                  <div className="text-center space-y-4 max-w-2xl mx-auto">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[10px] font-black uppercase tracking-widest">
+                <>
+                  <section className="text-center space-y-3 mb-6">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-4">
                       <Sparkles className="w-3 h-3" />
                       AI Coaching Engine
                     </div>
-                    <h1 className="text-4xl sm:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500 leading-[1.1]">
-                      Master Impromptu <br /> Speaking
+                    <h1 className="text-2xl sm:text-3xl lg:text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500 leading-tight">
+                      Master Impromptu Speaking
                     </h1>
-                    <div className="flex flex-wrap justify-center gap-4 pt-4">
+                    <div className="flex flex-wrap justify-center gap-3">
                       {[
-                        { icon: Rocket, label: "Pick a Challenge", color: "text-emerald-400" },
-                        { icon: Mic, label: "Speak for 60s", color: "text-violet-400" },
-                        { icon: CheckCircle2, label: "Get AI Coaching", color: "text-sky-400" }
+                        { icon: Rocket, label: "PICK CHALLENGE", color: "text-emerald-400" },
+                        { icon: Mic, label: "PRECISION DELIVERY", color: "text-violet-400" },
+                        { icon: CheckCircle2, label: "AI COACHING", color: "text-sky-400" }
                       ].map((step, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-zinc-900/50 border border-zinc-800/50 px-4 py-2 rounded-2xl">
-                          <step.icon className={`w-4 h-4 ${step.color}`} />
-                          <span className="text-xs font-bold text-zinc-400 uppercase tracking-tight">{step.label}</span>
+                        <div key={idx} className="flex items-center gap-2 bg-zinc-900/20 border border-zinc-800/30 px-2 py-0.5 rounded-full">
+                          <step.icon className={`w-2.5 h-2.5 ${step.color}`} />
+                          <span className="text-[7px] font-black text-zinc-400 uppercase tracking-widest">{step.label}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </section>
 
-                  <div className="flex flex-col lg:flex-row gap-10">
-                    <div className="lg:w-3/5 space-y-6">
-                      <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <Rocket className="w-4 h-4" /> 1. Select Arena
+                  <section className="flex flex-col lg:flex-row gap-8 lg:gap-10 flex-1 min-h-0 items-start lg:items-center justify-center pt-2 pb-24 lg:pb-0">
+                    {/* Left: Arena Podium */}
+                    <div className="flex flex-col min-h-0 max-w-4xl flex-1 w-full">
+                      <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-4 self-start">
+                        <Rocket className="w-3 h-3" /> 1. Select Arena
                       </h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-wrap gap-4 lg:overflow-y-auto lg:pr-4 pt-2 pb-8 justify-center items-start">
                         {arenaCards.map((card) => (
-                          <ArenaCard
-                            key={card.id}
-                            {...card}
-                            topics={getTopicCount(card.trackName)}
-                            isSelected={selectedArena === card.id}
-                            onClick={() => handleArenaSelect(card.id)}
-                          />
+                          <motion.div 
+                            layout
+                            key={card.id} 
+                            className="w-full sm:w-[calc(50%-8px)] lg:w-[calc(33.33%-12px)] min-w-full sm:min-w-[260px] p-1"
+                          >
+                            <ArenaCard
+                              {...card}
+                              isSelected={selectedArena === card.id}
+                              onClick={() => handleArenaSelect(card.id)}
+                            />
+                          </motion.div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="lg:w-2/5 flex flex-col gap-10">
-                      <div className="space-y-6">
-                        <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                          <Flame className="w-4 h-4" /> 2. Intensity
-                        </h2>
-                        <div className="grid grid-cols-3 gap-3">
-                          {difficulties.map((diff) => (
-                            <button
-                              key={diff.key}
-                              onClick={() => handleDifficultySelect(diff.key)}
-                              className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-standard active-scale hover-glow-primary ${
-                                selectedDifficulty === diff.key
-                                  ? `${diff.color} border-current bg-zinc-800/40 shadow-lg`
-                                  : `border-zinc-800 text-zinc-600 ${diff.bgHover} ${diff.borderHover}`
-                              }`}
-                            >
-                              <span className="text-2xl mb-2">{diff.emoji}</span>
-                              <span className="text-[10px] font-black uppercase tracking-widest">{diff.label}</span>
-                            </button>
-                          ))}
+                    {/* Right: Session Configuration */}
+                    <div className="lg:w-80 w-full flex flex-col gap-6 lg:pt-10">
+                      <div className="bg-zinc-900/40 backdrop-blur-xl border border-zinc-800/50 rounded-3xl p-6 space-y-6">
+                        <div className="space-y-4">
+                          <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                            <Flame className="w-3 h-3" /> 2. Intensity
+                          </h2>
+                          <div className="grid grid-cols-3 gap-2">
+                            {difficulties.map((diff) => (
+                              <button
+                                key={diff.key}
+                                onClick={() => handleDifficultySelect(diff.key)}
+                                className={`flex flex-col items-center justify-center py-3 rounded-xl border transition-all duration-300 active-scale ${
+                                  selectedDifficulty === diff.key
+                                    ? `${diff.color} ${diff.border} ${diff.activeBg} shadow-lg shadow-black/20`
+                                    : `border-zinc-800/80 text-zinc-600 ${diff.bgHover}`
+                                }`}
+                              >
+                                <span className="text-xl mb-1">{diff.emoji}</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest">{diff.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Desktop Action Button */}
+                        <div className="hidden lg:block">
+                          <button
+                            onClick={handleGenerate}
+                            disabled={!canGenerate || isGeneratingTopic}
+                            className={`w-full group flex items-center justify-center gap-3 py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-500 shadow-xl ${
+                              canGenerate && !isGeneratingTopic
+                                ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:scale-102 hover:shadow-violet-500/20 cursor-pointer active:scale-98 animate-pulse shadow-violet-500/10"
+                                : "bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed"
+                            }`}
+                          >
+                            {isGeneratingTopic ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                              <>
+                                <span>Forge Challenge</span>
+                                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
+                    </div>
 
+                    {/* Mobile Sticky Action Bar */}
+                    <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-zinc-950/80 backdrop-blur-xl border-t border-zinc-800/50 z-50">
                       <button
                         onClick={handleGenerate}
                         disabled={!canGenerate || isGeneratingTopic}
-                        className={`w-full group flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all duration-300 ${
+                        className={`w-full group flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-500 shadow-xl ${
                           canGenerate && !isGeneratingTopic
-                            ? "bg-white text-zinc-950 hover:scale-102 hover:shadow-2xl hover:shadow-white/10 cursor-pointer active:scale-98"
+                            ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white active:scale-95 shadow-violet-500/20"
                             : "bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed"
                         }`}
                       >
@@ -379,13 +525,13 @@ function AppContent() {
                         ) : (
                           <>
                             <span>Forge Challenge</span>
-                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                            <ChevronRight className="w-4 h-4" />
                           </>
                         )}
                       </button>
                     </div>
-                  </div>
-                </div>
+                  </section>
+                </>
               )}
 
               {/* PHASE: THINKING */}
@@ -404,29 +550,34 @@ function AppContent() {
 
               {/* PHASE: RECORDING */}
               {phase === "recording" && (
-                <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full animate-scale-in">
-                  <div className="w-full space-y-10 text-center">
-                    <div className="space-y-6">
+                <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full animate-scale-in py-4">
+                  <div className="w-full space-y-6 text-center">
+                    <div className="space-y-4">
                       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
                         <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                         Recording Live
                       </div>
-                      <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight">
+                      <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white leading-tight px-4">
                         {currentTopic?.topic}
                       </h2>
                     </div>
 
-                    <AudioVisualizer stream={stream} isRecording={isRecording} />
+                    <div className="space-y-2">
+                      <div className={`font-mono text-sm transition-colors duration-300 ${recordingTime >= 54 ? "text-amber-500" : "text-zinc-500"}`}>
+                        {formatTime(recordingTime)}
+                      </div>
+                      <AudioVisualizer stream={stream} isRecording={isRecording} />
+                    </div>
 
-                    <div className="flex flex-col items-center gap-8 pt-4">
+                    <div className="flex flex-col items-center gap-4 pt-2">
                       <button
                         onClick={handleFinishSpeaking}
-                        className="relative w-24 h-24 bg-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-rose-500/40 hover:scale-110 active:scale-90 transition-all cursor-pointer group"
+                        className="relative w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-rose-500/40 hover:scale-110 active:scale-90 transition-all cursor-pointer group"
                       >
                         <div className="absolute inset-0 bg-rose-500 rounded-full animate-ping opacity-20" />
-                        <Square className="w-8 h-8 text-white fill-current" />
+                        <Square className="w-6 h-6 text-white fill-current" />
                       </button>
-                      <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Click to finish speaking</p>
+                      <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Click to finish speaking</p>
                     </div>
                   </div>
                 </div>
@@ -434,18 +585,25 @@ function AppContent() {
 
               {/* PHASE: REVIEW */}
               {phase === "review" && (
-                <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full animate-fade-in-up space-y-12">
+                <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full animate-fade-in-up space-y-12 py-10">
                   <div className="text-center space-y-4">
-                    <h2 className="text-sm font-black text-zinc-500 uppercase tracking-[0.2em]">Review Your Session</h2>
-                    <p className="text-xl font-bold text-zinc-200">"{currentTopic?.topic}"</p>
+                    <h2 className="text-lg font-black text-zinc-500 uppercase tracking-[0.3em]">Review Your Session</h2>
+                    <p className="text-xl sm:text-2xl font-bold text-zinc-100 max-w-2xl mx-auto leading-relaxed">
+                      "{currentTopic?.topic}"
+                    </p>
                   </div>
 
-                  <div className="w-full bg-zinc-900/50 border border-zinc-800/50 p-8 rounded-3xl space-y-6">
-                    <div className="flex items-center justify-center p-4">
+                  <div className="w-full max-w-2xl space-y-10 relative">
+                    {/* UI Lock Shield */}
+                    {isAnalyzing && (
+                      <div className="absolute inset-x-[-2rem] inset-y-[-2rem] bg-zinc-950/10 backdrop-blur-sm z-20 rounded-3xl animate-fade-in" />
+                    )}
+
+                    <div className="flex items-center justify-center">
                       {status === 'ready' && audioUrl ? (
-                        <audio src={audioUrl} controls className="w-full max-w-md opacity-90 accent-violet-500" />
+                        <AudioPlayer src={audioUrl} />
                       ) : (
-                        <div className="flex flex-center flex-col items-center gap-4 text-zinc-500 py-8">
+                        <div className="flex flex-center flex-col items-center gap-4 text-zinc-500 py-12 bg-zinc-900/20 rounded-3xl border border-zinc-800/50 w-full max-w-md">
                           <div className="relative">
                             <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
                             <div className="absolute inset-0 bg-violet-500 blur-xl opacity-20 animate-pulse" />
@@ -457,17 +615,28 @@ function AppContent() {
                       )}
                     </div>
                     
-                    <div className="flex gap-4 pt-4">
-                      <button onClick={handleReset} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-bold text-sm hover:text-white transition-standard cursor-pointer">
-                        Discard
-                      </button>
-                      <button 
-                        onClick={handleSubmitForAnalysis} 
-                        disabled={isAnalyzing}
-                        className="flex-[2] py-4 rounded-2xl bg-white text-zinc-950 font-black text-sm uppercase tracking-widest hover:scale-102 transition-all cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        {isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Get AI Feedback <Sparkles className="w-4 h-4" /></>}
-                      </button>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                      {isAnalyzing ? (
+                        <div className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-white/50 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 animate-pulse cursor-not-allowed">
+                          <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                          <span>{loadingTexts[loadingTextIndex]}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={handleReset} 
+                            className="w-full sm:w-auto h-14 px-8 rounded-full border border-zinc-700 text-zinc-400 font-bold text-[11px] uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-all cursor-pointer"
+                          >
+                            Discard
+                          </button>
+                          <button 
+                            onClick={handleSubmitForAnalysis} 
+                            className="w-full sm:flex-1 h-14 px-10 rounded-full bg-white text-black font-black text-[11px] uppercase tracking-widest hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            Get AI Feedback <Sparkles className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -510,26 +679,30 @@ function AppContent() {
                         </div>
                         
                         <div className="grid sm:grid-cols-2 gap-8 pt-4 border-t border-zinc-800/50">
-                          <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Strengths</h4>
-                            <ul className="space-y-2">
-                              {analysisResult.strengths?.map((s, i) => (
-                                <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
-                                  <div className="w-1 h-1 rounded-full bg-emerald-500 mt-1.5 shrink-0" /> {s}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div className="space-y-4">
-                            <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Growth Areas</h4>
-                            <ul className="space-y-2">
-                              {analysisResult.weaknesses?.map((w, i) => (
-                                <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
-                                  <div className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 shrink-0" /> {w}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                          {analysisResult.strengths && analysisResult.strengths.length > 0 && (
+                            <div className="space-y-4">
+                              <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Strengths</h4>
+                              <ul className="space-y-2">
+                                {analysisResult.strengths.map((s, i) => (
+                                  <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
+                                    <div className="w-1 h-1 rounded-full bg-emerald-500 mt-1.5 shrink-0" /> {s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {analysisResult.weaknesses && analysisResult.weaknesses.length > 0 && (
+                            <div className="space-y-4">
+                              <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Growth Areas</h4>
+                              <ul className="space-y-2">
+                                {analysisResult.weaknesses.map((w, i) => (
+                                  <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
+                                    <div className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 shrink-0" /> {w}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -537,8 +710,8 @@ function AppContent() {
                     <div className="lg:col-span-2 space-y-6">
                       <div className="bg-gradient-to-br from-violet-600/10 to-transparent border border-violet-500/20 rounded-3xl p-8 space-y-6 sticky top-32">
                         <div className="space-y-2">
-                          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest">AI Refactor</span>
-                          <h3 className="text-xl font-bold">10% Better Version</h3>
+                          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest">Model Response</span>
+                          <h3 className="text-xl font-bold">You could say something like this...</h3>
                         </div>
                         <p className="text-zinc-200 text-sm leading-relaxed italic opacity-80">"{analysisResult.idealAnswer}"</p>
                         <button onClick={handleReset} className="w-full py-4 rounded-2xl bg-zinc-100 text-zinc-950 font-black text-xs uppercase tracking-widest hover:bg-white transition-all cursor-pointer">
@@ -553,39 +726,56 @@ function AppContent() {
           )}
         </div>
       </main>
-
-      <footer className="border-t border-zinc-800/50 py-4 text-center">
-        <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Engine v2.0 • Build 2026.05</p>
-      </footer>
     </div>
   );
 }
 
-function ArenaCard({ icon: Icon, title, description, topics, color, isSelected, onClick }) {
+function ArenaCard({ icon: Icon, title, description, color, shadowColor, ringColor, isSelected, onClick }) {
+  const glowColor = color.replace('bg-', 'from-').replace('-500', '-500/20');
+  
+  // Sharp 'Electrified' Selection Styles
+  const selectionStyles = {
+    'bg-emerald-500': 'border-emerald-500/50 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20 bg-emerald-500/5',
+    'bg-pink-500': 'border-pink-500/50 ring-2 ring-pink-500/50 shadow-lg shadow-pink-500/20 bg-pink-500/5',
+    'bg-rose-500': 'border-rose-500/50 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/20 bg-rose-500/5',
+    'bg-orange-500': 'border-orange-500/50 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20 bg-orange-500/5',
+    'bg-violet-500': 'border-violet-500/50 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20 bg-violet-500/5',
+  };
+
+  const activeStyles = selectionStyles[color] || 'border-zinc-400/50 ring-2 ring-zinc-400/50 shadow-lg shadow-zinc-400/20 bg-zinc-400/5';
+  const iconColorClass = color.replace('bg-', 'text-').replace('-500', '-400');
+
   return (
     <button
       onClick={onClick}
-      className={`group relative text-left bg-zinc-900/40 border transition-standard cursor-pointer rounded-2xl p-5 ${
+      className={`w-full group relative text-left backdrop-blur-xl border transition-all duration-500 cursor-pointer rounded-2xl p-6 ${
         isSelected
-          ? "border-zinc-500 bg-zinc-800/40 ring-4 ring-zinc-500/5 glow-primary"
-          : "border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-800/30"
+          ? `bg-zinc-800/80 ${activeStyles} -translate-y-1 scale-102 z-10`
+          : "bg-zinc-900/40 border-zinc-800/50 hover:border-zinc-700 hover:bg-zinc-800/30 shadow-xl shadow-black/20"
       }`}
     >
-      <div className="flex items-start gap-4">
-        <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xl group-hover:scale-110 transition-transform`}>
-          <Icon className="w-6 h-6 text-white" />
+      <div className="flex flex-col gap-5">
+        <div className="relative">
+          {/* Track Icon Aura - Compressed for Sharpness */}
+          <div className={`absolute inset-0 bg-gradient-to-br ${glowColor} to-transparent blur-xl rounded-full transition-opacity duration-500 ${
+            isSelected ? "opacity-60" : "opacity-30 group-hover:opacity-50"
+          }`} />
+          
+          <div className={`relative w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-all duration-500 ${
+            isSelected ? `${color} ring-2 ring-white/20` : `${color} bg-opacity-10`
+          }`}>
+            <Icon className={`w-6 h-6 transition-colors duration-500 ${
+              isSelected ? "text-white" : iconColorClass
+            }`} />
+          </div>
         </div>
+        
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <h3 className="text-sm font-bold text-zinc-100 truncate">{title}</h3>
-            <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-all ${isSelected ? "text-zinc-400" : "text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-1"}`} />
+            <h3 className={`text-sm font-bold truncate tracking-tight transition-colors duration-500 ${isSelected ? "text-white" : "text-zinc-100"}`}>{title}</h3>
+            <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-all duration-500 ${isSelected ? "text-white translate-x-1" : "text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-1"}`} />
           </div>
-          <p className="text-zinc-500 text-[10px] leading-relaxed line-clamp-2 font-medium">{description}</p>
-          <div className="mt-3">
-            <div className="inline-flex px-2 py-0.5 rounded-lg bg-zinc-950 text-[10px] font-black text-zinc-600 uppercase tracking-tight border border-zinc-800/50">
-              {topics} Questions
-            </div>
-          </div>
+          <p className={`text-[10px] leading-relaxed line-clamp-2 font-medium transition-colors duration-500 ${isSelected ? "text-white/90" : "text-zinc-500 opacity-70"}`}>{description}</p>
         </div>
       </div>
     </button>

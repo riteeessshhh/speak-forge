@@ -8,26 +8,52 @@ import { GoogleGenAI } from '@google/genai';
 import { log } from './logger.js';
 import pool from '../db/pool.js';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const keys = [
+  process.env.GEMINI_API_KEY_PRIMARY,
+  process.env.GEMINI_API_KEY_FALLBACK
+].filter(Boolean);
 
-// Default model — gemini-1.5-flash (1500 RPD / 15 RPM free tier)
+let currentKeyIndex = 0;
+let ai = new GoogleGenAI({ apiKey: keys[currentKeyIndex] });
+
+const rotateKey = () => {
+  if (keys.length < 2) return false;
+  currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+  ai = new GoogleGenAI({ apiKey: keys[currentKeyIndex] });
+  log.warn(`API Quota hit. Rotating to Gemini Key #${currentKeyIndex + 1}...`);
+  return true;
+};
+
+// Default model — gemini-1.5-flash
 const DEFAULT_MODEL = "gemini-1.5-flash";
 
-// Startup verification (no API call — zero quota usage)
-log.info(`Gemini SDK initialized. Default model: '${DEFAULT_MODEL}'`);
-
 /**
- * Generate content using Gemini.
- * @param {string} prompt - The prompt text
- * @param {string} [modelName] - Model to use (defaults to DEFAULT_MODEL)
- * @returns {Promise<string>} - The generated text
+ * Generate content using Gemini with automatic key rotation on quota limits.
  */
 export const generateContent = async (prompt, modelName = DEFAULT_MODEL) => {
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: prompt,
-  });
-  return response.text;
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    const status = error.status || error.code || 500;
+    const msg = error.message || "";
+    
+    // If Quota Exceeded, attempt rotation
+    if (status === 429 || msg.includes("Quota") || msg.includes("limit")) {
+      if (rotateKey()) {
+        // Re-attempt with new key
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+        });
+        return response.text;
+      }
+    }
+    throw error;
+  }
 };
 
 /**

@@ -66,10 +66,10 @@ export default function AudioVisualizer({ stream, isRecording }) {
         const x = i * (barWidth + barGap);
         const y = (height - barHeight) / 2;
         
-        // Gradient from violet to emerald
+        // Gradient from cyan to violet
         const gradient = ctx.createLinearGradient(0, y, 0, y + barHeight);
-        gradient.addColorStop(0, '#8b5cf6');
-        gradient.addColorStop(1, '#10b981');
+        gradient.addColorStop(0, '#22d3ee'); // cyan-400
+        gradient.addColorStop(1, '#8b5cf6'); // violet-500
         
         ctx.fillStyle = gradient;
         ctx.beginPath();
