@@ -31,18 +31,18 @@ export default function CountdownTimer({
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current);
-          onComplete();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
     return () => clearInterval(intervalRef.current);
-  }, [duration, onComplete]);
+  }, [duration]);
+
+  useEffect(() => {
+    if (timeLeft === 0) {
+      clearInterval(intervalRef.current);
+      onComplete();
+    }
+  }, [timeLeft, onComplete]);
 
   // ── Visual Calculations ──
   const progress = timeLeft / duration;

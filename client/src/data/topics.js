@@ -24,40 +24,40 @@
 export const tracks = {
   "Interview Prep": [
     // ── EASY: Common openers, low pressure ──
-    { text: "Tell me about yourself and your background.", difficulty: "easy" },
-    { text: "Why are you interested in this role?", difficulty: "easy" },
-    { text: "What are your greatest strengths?", difficulty: "easy" },
-    { text: "Describe your ideal work environment.", difficulty: "easy" },
-    { text: "What motivates you to do your best work?", difficulty: "easy" },
-    { text: "How did you hear about this position?", difficulty: "easy" },
-    { text: "What do you know about our company?", difficulty: "easy" },
-    { text: "Where do you see yourself in five years?", difficulty: "easy" },
-    { text: "What are you looking for in your next role?", difficulty: "easy" },
-    { text: "Describe a typical day at your current or most recent job.", difficulty: "easy" },
+    { text: "Tell me about yourself and your background.", difficulty: "easy", isBehavioral: false },
+    { text: "Why are you interested in this role?", difficulty: "easy", isBehavioral: false },
+    { text: "What are your greatest strengths?", difficulty: "easy", isBehavioral: false },
+    { text: "Describe your ideal work environment.", difficulty: "easy", isBehavioral: false },
+    { text: "What motivates you to do your best work?", difficulty: "easy", isBehavioral: false },
+    { text: "How did you hear about this position?", difficulty: "easy", isBehavioral: false },
+    { text: "What do you know about our company?", difficulty: "easy", isBehavioral: false },
+    { text: "Where do you see yourself in five years?", difficulty: "easy", isBehavioral: false },
+    { text: "What are you looking for in your next role?", difficulty: "easy", isBehavioral: false },
+    { text: "Describe a typical day at your current or most recent job.", difficulty: "easy", isBehavioral: false },
 
     // ── MEDIUM: STAR-method behavioral, require real stories ──
-    { text: "Tell me about a time you had to learn a new technology under a tight deadline.", difficulty: "medium" },
-    { text: "Describe a project where you had to make a significant trade-off.", difficulty: "medium" },
-    { text: "Tell me about a time you disagreed with a teammate. How did you resolve it?", difficulty: "medium" },
-    { text: "Describe the most challenging bug you've ever fixed. Walk me through your debugging process.", difficulty: "medium" },
-    { text: "Tell me about a time you went above and beyond what was expected.", difficulty: "medium" },
-    { text: "How do you prioritize tasks when multiple deadlines are approaching?", difficulty: "medium" },
-    { text: "Describe a project you are most proud of and your specific contribution.", difficulty: "medium" },
-    { text: "Tell me about a time you automated a manual process. What was the impact?", difficulty: "medium" },
-    { text: "Describe a situation where you had to collaborate across teams.", difficulty: "medium" },
-    { text: "Tell me about a time you used data to make an important decision.", difficulty: "medium" },
+    { text: "Tell me about a time you had to learn a new technology under a tight deadline.", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a project where you had to make a significant trade-off.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you disagreed with a teammate. How did you resolve it?", difficulty: "medium", isBehavioral: true },
+    { text: "Describe the most challenging bug you've ever fixed. Walk me through your debugging process.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you went above and beyond what was expected.", difficulty: "medium", isBehavioral: true },
+    { text: "How do you prioritize tasks when multiple deadlines are approaching?", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a project you are most proud of and your specific contribution.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you automated a manual process. What was the impact?", difficulty: "medium", isBehavioral: true },
+    { text: "Describe a situation where you had to collaborate across teams.", difficulty: "medium", isBehavioral: true },
+    { text: "Tell me about a time you used data to make an important decision.", difficulty: "medium", isBehavioral: true },
 
     // ── HARD: Conflict, failure, leadership pressure ──
-    { text: "Tell me about a time you failed on a project. What did you learn from it?", difficulty: "hard" },
-    { text: "Tell me about a time you had to push back on your manager's decision.", difficulty: "hard" },
-    { text: "Describe how you handle working on a codebase with massive technical debt.", difficulty: "hard" },
-    { text: "Tell me about a time you had to deliver without all the resources you needed.", difficulty: "hard" },
-    { text: "Describe a technical decision you made that you later deeply regretted.", difficulty: "hard" },
-    { text: "Tell me about handling a production incident that affected thousands of users.", difficulty: "hard" },
-    { text: "How would you handle a situation where your team is consistently missing deadlines?", difficulty: "hard" },
-    { text: "Describe a time when you had to say no to a feature request from a senior stakeholder.", difficulty: "hard" },
-    { text: "Tell me about leading a project where the scope changed dramatically mid-sprint.", difficulty: "hard" },
-    { text: "Describe a time you had to persuade an entire team to adopt a new approach they resisted.", difficulty: "hard" },
+    { text: "Tell me about a time you failed on a project. What did you learn from it?", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to push back on your manager's decision.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe how you handle working on a codebase with massive technical debt.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about a time you had to deliver without all the resources you needed.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a technical decision you made that you later deeply regretted.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about handling a production incident that affected thousands of users.", difficulty: "hard", isBehavioral: true },
+    { text: "How would you handle a situation where your team is consistently missing deadlines?", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time when you had to say no to a feature request from a senior stakeholder.", difficulty: "hard", isBehavioral: true },
+    { text: "Tell me about leading a project where the scope changed dramatically mid-sprint.", difficulty: "hard", isBehavioral: true },
+    { text: "Describe a time you had to persuade an entire team to adopt a new approach they resisted.", difficulty: "hard", isBehavioral: true },
   ],
 
   "Tech & CS": [
@@ -290,7 +290,7 @@ export function getRandomTopic(trackName, difficulty) {
   if (pool.length === 0) return null;
 
   const chosen = pool[Math.floor(Math.random() * pool.length)];
-  return { track: trackName, topic: chosen.text, difficulty: chosen.difficulty };
+  return { track: trackName, topic: chosen.text, difficulty: chosen.difficulty, isBehavioral: chosen.isBehavioral || false };
 }
 
 /**

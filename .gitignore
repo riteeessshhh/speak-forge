@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (API keys, secrets)
+.env
+.env.*
+
+# Generated files
+repomix-output.xml
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

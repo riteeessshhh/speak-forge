@@ -1,19 +1,24 @@
 /**
- * App.jsx — Vercel v0 Design + Our State Logic.
- *
- * DESIGN: Compact single-frame desktop layout from v0.
- * LOGIC:  Track selection, difficulty, topic generation, phase machine.
- *
- * Key: lg:h-screen + lg:overflow-hidden = no scroll on desktop.
- *      overflow-y-auto = scrolls naturally on mobile.
+ * App.jsx — Production-Ready SpeakForge
  */
 
-import { useState, useCallback } from "react";
-import { Building2, Cpu, Flame, Rocket, Shuffle, Sparkles, Mic, ChevronRight, RotateCcw } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { 
+  Building2, Cpu, Flame, Rocket, Shuffle, Sparkles, Mic, 
+  ChevronRight, RotateCcw, Square, BarChart3, LogOut, 
+  Loader2, Play, CheckCircle2, History 
+} from "lucide-react";
+import { Toaster, toast } from "react-hot-toast";
 import { getRandomTopic, getTopicCount } from "./data/topics";
 import CountdownTimer from "./components/CountdownTimer";
+import { useAudioRecorder } from "./hooks/useAudioRecorder";
+import { UserProvider, useAuth } from "./contexts/UserContext";
+import AuthView from "./components/AuthView";
+import Dashboard from "./components/Dashboard";
+import AudioVisualizer from "./components/AudioVisualizer";
+import Skeleton, { SkeletonText } from "./components/Skeleton";
 
-/* ── Card data (visual config — matches v0 design exactly) ── */
+/* ── Card data ── */
 const arenaCards = [
   {
     id: "interview",
@@ -70,291 +75,515 @@ const difficulties = [
 
 const PREP_DURATION = 30;
 
+/* ══════ Root Export ══════ */
 export default function App() {
-  /* ══════ STATE ══════ */
+  return (
+    <UserProvider>
+      <Toaster 
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: '#18181b',
+            color: '#fafafa',
+            border: '1px solid #27272a',
+          },
+        }} 
+      />
+      <AppContent />
+    </UserProvider>
+  );
+}
+
+/* ══════ Main App Content ══════ */
+function AppContent() {
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  
   const [phase, setPhase] = useState("selection");
   const [selectedArena, setSelectedArena] = useState(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState(null);
   const [currentTopic, setCurrentTopic] = useState(null);
+  const [isGeneratingTopic, setIsGeneratingTopic] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [showDashboard, setShowDashboard] = useState(false);
 
-  /* ══════ DERIVED ══════ */
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const { status, isRecording, audioUrl, audioBlob, stream, startRecording, stopRecording, clearAudio } = useAudioRecorder();
+
   const canGenerate = selectedArena !== null && selectedDifficulty !== null;
   const selectedCard = arenaCards.find((c) => c.id === selectedArena);
 
-  /* ══════ HANDLERS ══════ */
+  /* ── Handlers ── */
   const handleArenaSelect = (id) => {
     setSelectedArena(id);
     setSelectedDifficulty(null);
   };
 
-  const handleDifficultySelect = (key) => {
-    setSelectedDifficulty(key);
-  };
+  const handleDifficultySelect = (key) => setSelectedDifficulty(key);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!canGenerate || !selectedCard) return;
-    const result = getRandomTopic(selectedCard.trackName, selectedDifficulty);
-    if (!result) return;
-    setCurrentTopic(result);
+    setIsGeneratingTopic(true);
+
+    let generatedTopic = null;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const res = await fetch(`${API_URL}/api/generate-topic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          track: selectedCard.trackName,
+          difficulty: selectedDifficulty,
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        generatedTopic = {
+          track: selectedCard.trackName,
+          difficulty: selectedDifficulty,
+          topic: data.topic,
+          isBehavioral: data.isBehavioral || false
+        };
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || "AI Forge is busy.");
+      }
+    } catch (err) {
+      toast.error("Network lag detected. Using local fallback.");
+    }
+
+    setIsGeneratingTopic(false);
+    if (generatedTopic) {
+      setCurrentTopic(generatedTopic);
+    } else {
+      const result = getRandomTopic(selectedCard.trackName, selectedDifficulty);
+      if (!result) return;
+      setCurrentTopic(result);
+    }
     setPhase("thinking");
   };
 
-  const handleTimerComplete = useCallback(() => {
-    setPhase("ready");
-  }, []);
+  const handleStartRecording = useCallback(async () => {
+    console.log("[App] handleStartRecording initiated");
+    // Safety timeout: if getUserMedia hangs (waiting for permission), don't lock the UI
+    const permissionTimeout = setTimeout(() => {
+      toast.error("Microphone permission timed out. Please check your browser's address bar.");
+    }, 8000);
 
-  const handleSkip = () => setPhase("ready");
+    try {
+      await startRecording();
+      clearTimeout(permissionTimeout);
+      console.log("[App] Recording started, successfully set state");
+      setPhase("recording");
+    } catch (err) {
+      clearTimeout(permissionTimeout);
+      console.error("[App] Failed to start recording:", err);
+      toast.error("Microphone access is required.");
+    }
+  }, [startRecording]);
+
+  const handleFinishSpeaking = () => {
+    stopRecording();
+  };
+
+  useEffect(() => {
+    if (phase === "recording" && status === "ready") {
+      setPhase("review");
+    }
+    // Error toast if recording fails to finalize
+    if (status === 'idle' && phase === 'recording' && !audioBlob) {
+      toast.error("Recording failed. Please check your mic and try again.");
+    }
+  }, [phase, status, audioBlob]);
 
   const handleReset = () => {
+    clearAudio();
     setPhase("selection");
     setSelectedArena(null);
     setSelectedDifficulty(null);
     setCurrentTopic(null);
+    setAnalysisResult(null);
+    setShowDashboard(false);
   };
 
-  /* ══════ RENDER ══════ */
+  const handleSubmitForAnalysis = async () => {
+    if (!audioBlob) return;
+    setIsAnalyzing(true);
+    try {
+      const extension = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
+      const formData = new FormData();
+      // Fields first, file last
+      formData.append('track', currentTopic.track);
+      formData.append('difficulty', currentTopic.difficulty);
+      formData.append('topic', currentTopic.topic);
+      formData.append('isBehavioral', currentTopic.isBehavioral || false);
+      formData.append('audio', audioBlob, `recording.${extension}`);
+
+      const response = await fetch(`${API_URL}/api/upload`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Analysis request failed');
+      }
+
+      const data = await response.json();
+      setAnalysisResult(data.analysis);
+      setPhase("analysis");
+      toast.success("Analysis complete!");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return <AuthView />;
+
   return (
-    <div className="min-h-screen lg:h-screen bg-[#0a0e17] text-white flex flex-col overflow-y-auto lg:overflow-hidden">
-      {/* Top accent bar */}
-      <div className="fixed top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 via-pink-500 to-violet-500 z-50" />
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col selection:bg-violet-500/30">
+      <div className="fixed top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-600 via-emerald-500 to-sky-500 z-50" />
 
       {/* Header */}
-      <header className="border-b border-slate-800/80 bg-[#0a0e17]/80 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Mic className="w-4 h-4 text-white" />
+      <header className="border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-[1200px] mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center glow-primary">
+              <Mic className="w-5 h-5 text-violet-400" />
             </div>
-            <span className="text-lg font-semibold tracking-tight">SpeakForge</span>
+            <span className="text-xl font-black tracking-tighter">SpeakForge</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="hidden sm:inline">Master the art of speaking</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowDashboard(!showDashboard)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-standard cursor-pointer ${
+                showDashboard
+                  ? "bg-violet-500/10 text-violet-400 border border-violet-500/20"
+                  : "text-zinc-400 hover:text-white border border-transparent"
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Dashboard</span>
+            </button>
+            <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
+            <button onClick={logout} className="p-2 text-zinc-500 hover:text-rose-400 transition-standard cursor-pointer">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col justify-center px-4 py-4 lg:py-0">
-        <div className="max-w-5xl w-full mx-auto flex flex-col">
-
-          {/* ══════ PHASE: SELECTION ══════ */}
-          {phase === "selection" && (
+      <main className="flex-1 flex flex-col px-6 py-10 lg:py-16 overflow-y-auto">
+        <div className="max-w-[1200px] w-full mx-auto flex-1 flex flex-col">
+          {showDashboard ? (
+            <Dashboard onBack={() => setShowDashboard(false)} />
+          ) : (
             <>
-              {/* Page Title */}
-              <div className="text-center mb-5 lg:mb-4">
-                <h1 className="text-2xl md:text-3xl font-bold mb-1.5 tracking-tight">
-                  Pick Your Arena
-                </h1>
-                <p className="text-slate-400 text-sm max-w-xl mx-auto">
-                  Choose a track and difficulty. Each combination sharpens a different muscle
-                  for speaking with clarity and confidence.
-                </p>
-              </div>
-
-              {/* Arena Cards Grid — Top 3 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                {arenaCards.slice(0, 3).map((card) => (
-                  <ArenaCard
-                    key={card.id}
-                    {...card}
-                    topics={getTopicCount(card.trackName)}
-                    isSelected={selectedArena === card.id}
-                    onClick={() => handleArenaSelect(card.id)}
-                  />
-                ))}
-              </div>
-
-              {/* Bottom row — centered 2 cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mt-2 sm:mt-3 lg:max-w-[66%] lg:mx-auto">
-                {arenaCards.slice(3).map((card) => (
-                  <ArenaCard
-                    key={card.id}
-                    {...card}
-                    topics={getTopicCount(card.trackName)}
-                    isSelected={selectedArena === card.id}
-                    onClick={() => handleArenaSelect(card.id)}
-                  />
-                ))}
-              </div>
-
-              {/* Bottom Action Panel — "Configure Session" */}
-              <div className="mt-3 sm:mt-4 lg:mt-3 bg-gradient-to-b from-slate-800/50 to-slate-900/50 border border-slate-700/60 rounded-xl overflow-hidden">
-                {/* Panel Header */}
-                <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-slate-700/40 bg-slate-800/30 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-slate-700/50 flex items-center justify-center">
-                      <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                      </svg>
+              {/* PHASE: SELECTION */}
+              {phase === "selection" && (
+                <div className="animate-fade-in-up space-y-12">
+                  <div className="text-center space-y-4 max-w-2xl mx-auto">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[10px] font-black uppercase tracking-widest">
+                      <Sparkles className="w-3 h-3" />
+                      AI Coaching Engine
                     </div>
-                    <span className="text-xs sm:text-sm font-medium text-slate-300">Configure Session</span>
-                  </div>
-                  <span className="text-[10px] sm:text-xs text-slate-500">
-                    {selectedArena ? "1 arena selected" : "Select an arena"}
-                  </span>
-                </div>
-
-                {/* Panel Content */}
-                <div className="p-3 sm:p-4 flex flex-col lg:flex-row items-center justify-between gap-3 sm:gap-4">
-                  {/* Difficulty Selection */}
-                  <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                    <span className="text-xs text-slate-500 uppercase tracking-wider font-medium shrink-0">Difficulty</span>
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-center">
-                      {difficulties.map((diff) => {
-                        const count = selectedCard
-                          ? getTopicCount(selectedCard.trackName, diff.key)
-                          : 10;
-
-                        return (
-                          <button
-                            key={diff.key}
-                            id={`difficulty-${diff.key}`}
-                            onClick={() => handleDifficultySelect(diff.key)}
-                            className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border transition-all duration-200 flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
-                              selectedDifficulty === diff.key
-                                ? `bg-slate-700/80 border-slate-500 ${diff.color}`
-                                : `bg-slate-800/50 border-slate-700/50 ${diff.bgHover} ${diff.borderHover}`
-                            }`}
-                          >
-                            <span className="text-xs sm:text-sm">{diff.emoji}</span>
-                            <span className={`text-xs sm:text-sm font-medium ${selectedDifficulty === diff.key ? diff.color : "text-slate-300"}`}>
-                              {diff.label}
-                            </span>
-                            <span className="text-[10px] sm:text-xs text-slate-500 bg-slate-700/50 px-1 sm:px-1.5 py-0.5 rounded">
-                              {count}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <h1 className="text-4xl sm:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500 leading-[1.1]">
+                      Master Impromptu <br /> Speaking
+                    </h1>
+                    <div className="flex flex-wrap justify-center gap-4 pt-4">
+                      {[
+                        { icon: Rocket, label: "Pick a Challenge", color: "text-emerald-400" },
+                        { icon: Mic, label: "Speak for 60s", color: "text-violet-400" },
+                        { icon: CheckCircle2, label: "Get AI Coaching", color: "text-sky-400" }
+                      ].map((step, idx) => (
+                        <div key={idx} className="flex items-center gap-3 bg-zinc-900/50 border border-zinc-800/50 px-4 py-2 rounded-2xl">
+                          <step.icon className={`w-4 h-4 ${step.color}`} />
+                          <span className="text-xs font-bold text-zinc-400 uppercase tracking-tight">{step.label}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Divider */}
-                  <div className="hidden lg:block w-px h-10 bg-slate-700/50" />
+                  <div className="flex flex-col lg:flex-row gap-10">
+                    <div className="lg:w-3/5 space-y-6">
+                      <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Rocket className="w-4 h-4" /> 1. Select Arena
+                      </h2>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {arenaCards.map((card) => (
+                          <ArenaCard
+                            key={card.id}
+                            {...card}
+                            topics={getTopicCount(card.trackName)}
+                            isSelected={selectedArena === card.id}
+                            onClick={() => handleArenaSelect(card.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Generate Button */}
-                  <button
-                    id="generate-topic-btn"
-                    onClick={handleGenerate}
-                    disabled={!canGenerate}
-                    className={`group relative px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all duration-300 text-sm sm:text-base w-full sm:w-auto justify-center cursor-pointer ${
-                      canGenerate
-                        ? "bg-gradient-to-r from-violet-600 to-purple-600 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.02]"
-                        : "bg-slate-700/50 text-slate-400 cursor-not-allowed"
-                    }`}
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>Generate Topic</span>
-                    <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                  </button>
+                    <div className="lg:w-2/5 flex flex-col gap-10">
+                      <div className="space-y-6">
+                        <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                          <Flame className="w-4 h-4" /> 2. Intensity
+                        </h2>
+                        <div className="grid grid-cols-3 gap-3">
+                          {difficulties.map((diff) => (
+                            <button
+                              key={diff.key}
+                              onClick={() => handleDifficultySelect(diff.key)}
+                              className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-standard active-scale hover-glow-primary ${
+                                selectedDifficulty === diff.key
+                                  ? `${diff.color} border-current bg-zinc-800/40 shadow-lg`
+                                  : `border-zinc-800 text-zinc-600 ${diff.bgHover} ${diff.borderHover}`
+                              }`}
+                            >
+                              <span className="text-2xl mb-2">{diff.emoji}</span>
+                              <span className="text-[10px] font-black uppercase tracking-widest">{diff.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleGenerate}
+                        disabled={!canGenerate || isGeneratingTopic}
+                        className={`w-full group flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all duration-300 ${
+                          canGenerate && !isGeneratingTopic
+                            ? "bg-white text-zinc-950 hover:scale-102 hover:shadow-2xl hover:shadow-white/10 cursor-pointer active:scale-98"
+                            : "bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed"
+                        }`}
+                      >
+                        {isGeneratingTopic ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <>
+                            <span>Forge Challenge</span>
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* PHASE: THINKING */}
+              {phase === "thinking" && currentTopic && (
+                <div className="flex-1 flex flex-col items-center justify-center animate-fade-in py-10">
+                  <CountdownTimer
+                    duration={PREP_DURATION}
+                    topic={currentTopic.topic}
+                    sourceTrack={currentTopic.track}
+                    difficulty={currentTopic.difficulty}
+                    onComplete={handleStartRecording}
+                    onSkip={handleStartRecording}
+                  />
+                </div>
+              )}
+
+              {/* PHASE: RECORDING */}
+              {phase === "recording" && (
+                <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full animate-scale-in">
+                  <div className="w-full space-y-10 text-center">
+                    <div className="space-y-6">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
+                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        Recording Live
+                      </div>
+                      <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight">
+                        {currentTopic?.topic}
+                      </h2>
+                    </div>
+
+                    <AudioVisualizer stream={stream} isRecording={isRecording} />
+
+                    <div className="flex flex-col items-center gap-8 pt-4">
+                      <button
+                        onClick={handleFinishSpeaking}
+                        className="relative w-24 h-24 bg-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-rose-500/40 hover:scale-110 active:scale-90 transition-all cursor-pointer group"
+                      >
+                        <div className="absolute inset-0 bg-rose-500 rounded-full animate-ping opacity-20" />
+                        <Square className="w-8 h-8 text-white fill-current" />
+                      </button>
+                      <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Click to finish speaking</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PHASE: REVIEW */}
+              {phase === "review" && (
+                <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full animate-fade-in-up space-y-12">
+                  <div className="text-center space-y-4">
+                    <h2 className="text-sm font-black text-zinc-500 uppercase tracking-[0.2em]">Review Your Session</h2>
+                    <p className="text-xl font-bold text-zinc-200">"{currentTopic?.topic}"</p>
+                  </div>
+
+                  <div className="w-full bg-zinc-900/50 border border-zinc-800/50 p-8 rounded-3xl space-y-6">
+                    <div className="flex items-center justify-center p-4">
+                      {status === 'ready' && audioUrl ? (
+                        <audio src={audioUrl} controls className="w-full max-w-md opacity-90 accent-violet-500" />
+                      ) : (
+                        <div className="flex items-center gap-3 text-zinc-500 py-4">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span className="text-xs font-bold uppercase tracking-widest">
+                            Finalizing audio...
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-4 pt-4">
+                      <button onClick={handleReset} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-bold text-sm hover:text-white transition-standard cursor-pointer">
+                        Discard
+                      </button>
+                      <button 
+                        onClick={handleSubmitForAnalysis} 
+                        disabled={isAnalyzing}
+                        className="flex-[2] py-4 rounded-2xl bg-white text-zinc-950 font-black text-sm uppercase tracking-widest hover:scale-102 transition-all cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {isAnalyzing ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Get AI Feedback <Sparkles className="w-4 h-4" /></>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isAnalyzing && (
+                    <div className="w-full space-y-6 animate-pulse">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
+                      </div>
+                      <Skeleton className="h-64 w-full" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* PHASE: ANALYSIS */}
+              {phase === "analysis" && analysisResult && (
+                <div className="animate-fade-in-up space-y-10 pb-20">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[
+                      { label: "Confidence", val: analysisResult.confidenceScore, color: "text-violet-400" },
+                      { label: "Clarity", val: analysisResult.clarityScore, color: "text-emerald-400" },
+                      { label: "Structure", val: analysisResult.structureScore, color: "text-amber-400" },
+                      { label: "Fillers", val: analysisResult.fillerWordsCount, color: "text-rose-400" }
+                    ].map(stat => (
+                      <div key={stat.label} className="bg-zinc-900/50 border border-zinc-800/50 p-6 rounded-3xl text-center">
+                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-2">{stat.label}</span>
+                        <div className={`text-3xl font-black ${stat.color}`}>{stat.val}{stat.label !== 'Fillers' && <span className="text-xs opacity-30">/10</span>}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid lg:grid-cols-5 gap-10">
+                    <div className="lg:col-span-3 space-y-8">
+                      <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-8 space-y-8">
+                        <div className="space-y-4">
+                          <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-violet-400" /> Coaching Insight
+                          </h3>
+                          <p className="text-zinc-300 leading-relaxed italic text-sm">"{analysisResult.overallFeedback}"</p>
+                        </div>
+                        
+                        <div className="grid sm:grid-cols-2 gap-8 pt-4 border-t border-zinc-800/50">
+                          <div className="space-y-4">
+                            <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Strengths</h4>
+                            <ul className="space-y-2">
+                              {analysisResult.strengths?.map((s, i) => (
+                                <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
+                                  <div className="w-1 h-1 rounded-full bg-emerald-500 mt-1.5 shrink-0" /> {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="space-y-4">
+                            <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Growth Areas</h4>
+                            <ul className="space-y-2">
+                              {analysisResult.weaknesses?.map((w, i) => (
+                                <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
+                                  <div className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 shrink-0" /> {w}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-2 space-y-6">
+                      <div className="bg-gradient-to-br from-violet-600/10 to-transparent border border-violet-500/20 rounded-3xl p-8 space-y-6 sticky top-32">
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest">AI Refactor</span>
+                          <h3 className="text-xl font-bold">10% Better Version</h3>
+                        </div>
+                        <p className="text-zinc-200 text-sm leading-relaxed italic opacity-80">"{analysisResult.idealAnswer}"</p>
+                        <button onClick={handleReset} className="w-full py-4 rounded-2xl bg-zinc-100 text-zinc-950 font-black text-xs uppercase tracking-widest hover:bg-white transition-all cursor-pointer">
+                          Start New Session
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
-
-          {/* ══════ PHASE: THINKING ══════ */}
-          {phase === "thinking" && currentTopic && (
-            <div className="flex-1 flex items-center justify-center py-8">
-              <CountdownTimer
-                duration={PREP_DURATION}
-                topic={currentTopic.topic}
-                sourceTrack={currentTopic.track}
-                difficulty={currentTopic.difficulty}
-                onComplete={handleTimerComplete}
-                onSkip={handleSkip}
-              />
-            </div>
-          )}
-
-          {/* ══════ PHASE: READY ══════ */}
-          {phase === "ready" && currentTopic && (
-            <div className="flex flex-col items-center gap-6 py-8">
-              {/* Badges */}
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <span className="px-3 py-1 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 text-[11px] font-medium uppercase tracking-wider">
-                  {currentTopic.track}
-                </span>
-                <span className="px-3 py-1 rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 text-[11px] font-medium capitalize">
-                  {currentTopic.difficulty}
-                </span>
-              </div>
-
-              {/* Topic */}
-              <div className="max-w-xl text-center">
-                <p className="text-white text-lg sm:text-xl md:text-2xl font-semibold leading-relaxed">
-                  &ldquo;{currentTopic.topic}&rdquo;
-                </p>
-              </div>
-
-              {/* Ready Indicator */}
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center animate-float shadow-2xl shadow-violet-500/20">
-                  <Mic className="w-8 h-8 text-white" />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="text-emerald-400 font-bold text-lg sm:text-xl">You&rsquo;re Ready!</p>
-                  <p className="text-slate-500 text-xs">Recording will be available in Capsule 2.</p>
-                </div>
-              </div>
-
-              {/* Reset */}
-              <button
-                id="new-topic-btn"
-                onClick={handleReset}
-                className="group flex items-center gap-2 px-5 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-400 font-medium text-sm hover:bg-slate-700/60 hover:text-slate-200 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-[0.97]"
-              >
-                <RotateCcw className="w-4 h-4 group-hover:-rotate-90 transition-transform duration-300" />
-                New Topic
-              </button>
-            </div>
-          )}
-
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/50 py-2 text-center">
-        <p className="text-xs text-slate-600">Practice speaking with confidence</p>
+      <footer className="border-t border-zinc-800/50 py-4 text-center">
+        <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">Engine v2.0 • Build 2026.05</p>
       </footer>
     </div>
   );
 }
 
-/* ── ArenaCard — Horizontal layout (icon left, content right) ── */
-function ArenaCard({ icon: Icon, title, description, topics, color, hoverBorder, isSelected, onClick }) {
+function ArenaCard({ icon: Icon, title, description, topics, color, isSelected, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`group relative text-left bg-slate-800/20 border rounded-xl p-2.5 sm:p-3.5 transition-all duration-200 cursor-pointer ${
+      className={`group relative text-left bg-zinc-900/40 border transition-standard cursor-pointer rounded-2xl p-5 ${
         isSelected
-          ? "border-slate-500 bg-slate-800/40 ring-1 ring-slate-500/20"
-          : `border-slate-800 ${hoverBorder} hover:bg-slate-800/30`
+          ? "border-zinc-500 bg-zinc-800/40 ring-4 ring-zinc-500/5 glow-primary"
+          : "border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-800/30"
       }`}
     >
-      <div className="flex items-start gap-2.5 sm:gap-3">
-        {/* Icon */}
-        <div className={`w-8 h-8 sm:w-9 sm:h-9 ${color} rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg`}>
-          <Icon className="w-4 h-4 text-white" />
+      <div className="flex items-start gap-4">
+        <div className={`w-12 h-12 ${color} rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xl group-hover:scale-110 transition-transform`}>
+          <Icon className="w-6 h-6 text-white" />
         </div>
-
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <h3 className="text-xs sm:text-sm font-semibold truncate">{title}</h3>
-            <ChevronRight className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 transition-all ${isSelected ? "text-slate-400" : "text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5"}`} />
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h3 className="text-sm font-bold text-zinc-100 truncate">{title}</h3>
+            <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-all ${isSelected ? "text-zinc-400" : "text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-1"}`} />
           </div>
-          <p className="text-slate-500 text-[11px] sm:text-xs leading-relaxed line-clamp-2">{description}</p>
-          <div className="mt-1 sm:mt-1.5 flex items-center gap-1.5">
-            <span className="text-[10px] sm:text-xs text-slate-600 bg-slate-800/80 px-1.5 sm:px-2 py-0.5 rounded-full">{topics} topics</span>
+          <p className="text-zinc-500 text-[10px] leading-relaxed line-clamp-2 font-medium">{description}</p>
+          <div className="mt-3">
+            <div className="inline-flex px-2 py-0.5 rounded-lg bg-zinc-950 text-[10px] font-black text-zinc-600 uppercase tracking-tight border border-zinc-800/50">
+              {topics} Questions
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Selection indicator */}
-      {isSelected && (
-        <div className={`absolute top-2 right-2 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${color}`} />
-      )}
     </button>
   );
 }

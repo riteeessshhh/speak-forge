@@ -1,43 +1,32 @@
 /* ============================================================
-   Speak Forge — Global Styles (v3 — Clean Reset for New Skeleton)
-   
-   Stripped down to only what's needed:
-   - Tailwind import
-   - Theme tokens (for CountdownTimer and any custom color refs)
-   - Keyframe animations
-   - No conflicting resets, no bg-mesh, no glass
+   Speak Forge — Global Styles (Production Polish)
    ============================================================ */
 
 @import "tailwindcss";
 
-/* ── Custom Theme Tokens (kept for CountdownTimer compatibility) ── */
+/* ── Custom Theme Tokens ── */
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 
-  /* Brand palette */
-  --color-primary: hsl(250, 80%, 62%);
-  --color-primary-light: hsl(250, 80%, 72%);
-  --color-primary-dark: hsl(250, 80%, 50%);
+  /* Brand palette - Using Slate/Zinc for a premium dark feel */
+  --color-primary: #8b5cf6; /* violet-500 */
+  --color-primary-light: #a78bfa;
+  --color-primary-dark: #7c3aed;
 
-  --color-accent: hsl(170, 70%, 50%);
-  --color-accent-light: hsl(170, 70%, 62%);
+  --color-accent: #10b981; /* emerald-500 */
+  --color-accent-light: #34d399;
 
-  /* Surface layers (used by CountdownTimer) */
-  --color-surface-900: #0B0F19;
-  --color-surface-800: hsl(228, 26%, 10%);
-  --color-surface-700: hsl(228, 22%, 14%);
-  --color-surface-600: hsl(228, 18%, 20%);
-  --color-surface-500: hsl(228, 15%, 28%);
+  /* Surface layers */
+  --color-surface-900: #09090b; /* zinc-950 */
+  --color-surface-800: #18181b; /* zinc-900 */
+  --color-surface-700: #27272a; /* zinc-800 */
+  --color-surface-600: #3f3f46; /* zinc-700 */
+  --color-surface-500: #52525b; /* zinc-600 */
 
-  /* Text hierarchy (used by CountdownTimer) */
-  --color-text-primary: hsl(0, 0%, 96%);
-  --color-text-secondary: hsl(228, 15%, 65%);
-  --color-text-muted: hsl(228, 12%, 42%);
-
-  /* Status colors */
-  --color-warning: hsl(38, 92%, 55%);
-  --color-danger: hsl(0, 72%, 55%);
-  --color-success: hsl(150, 60%, 50%);
+  /* Text hierarchy */
+  --color-text-primary: #fafafa; /* zinc-50 */
+  --color-text-secondary: #a1a1aa; /* zinc-400 */
+  --color-text-muted: #71717a; /* zinc-500 */
 }
 
 /* ── Minimal Base ── */
@@ -49,17 +38,19 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #09090b;
+  color: #fafafa;
 }
 
 /* ── Scrollbar Styling (Webkit) ── */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0B0F19; }
+::-webkit-scrollbar-track { background: #09090b; }
 ::-webkit-scrollbar-thumb {
-  background: hsl(228, 18%, 20%);
+  background: #27272a;
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(228, 15%, 28%);
+  background: #3f3f46;
 }
 
 /* ══════════════════════════════════════
@@ -67,7 +58,7 @@ body {
    ══════════════════════════════════════ */
 
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -77,28 +68,23 @@ body {
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.92); }
+  from { opacity: 0; transform: scale(0.96); }
   to   { opacity: 1; transform: scale(1); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px hsla(250, 80%, 62%, 0.25); }
-  50%      { box-shadow: 0 0 40px hsla(250, 80%, 62%, 0.5); }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-@keyframes countdown-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.08); }
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50%      { transform: translateY(-8px); }
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 /* ── Animation Utility Classes ── */
 .animate-fade-in-up {
-  animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-fade-in {
@@ -106,17 +92,41 @@ body {
 }
 
 .animate-scale-in {
-  animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 2.5s ease-in-out infinite;
+.animate-shimmer {
+  background: linear-gradient(90deg, #18181b 25%, #27272a 50%, #18181b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
 }
 
-.animate-countdown-pulse {
-  animation: countdown-pulse 1s ease-in-out infinite;
+.animate-pulse-soft {
+  animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
+/* ── Glow Effects ── */
+.glow-primary {
+  box-shadow: 0 0 20px -5px rgba(139, 92, 246, 0.3);
+}
+
+.hover-glow-primary:hover {
+  box-shadow: 0 0 25px -5px rgba(139, 92, 246, 0.5);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.3);
+}
+
+.hover-glow-emerald:hover {
+  box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.5);
+}
+
+/* ── Transition Presets ── */
+.transition-standard {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.active-scale:active {
+  transform: scale(0.98);
 }
