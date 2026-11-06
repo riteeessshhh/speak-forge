@@ -1,0 +1,73 @@
+# Promptfoo Configuration for SpeakForge Evals
+# Run with: npx promptfoo eval
+# View results with: npx promptfoo view
+
+description: "SpeakForge Interview Analysis Evals"
+
+prompts:
+  - |
+    Analyze this interview response.
+    Topic: "{{topic}}"
+    Track: {{track}}
+    Transcript: "{{transcript}}"
+
+    STRICT EVALUATION RULES:
+    1. IF TRANSCRIPT IS "[INVALID_SESSION: NO VALID SPEECH DETECTED]":
+       - Set confidenceScore, clarityScore, and structureScore to 0.
+       - Set fillerWordsCount to 0.
+       - Set overallFeedback to: "SpeakForge couldn't hear you clearly. Please ensure your microphone is working and you are answering the prompt."
+       - Set idealAnswer to a STANDARD, simple sample answer for the prompt.
+       - Return EMPTY arrays [] for strengths and weaknesses.
+    2. RELEVANCE AUDIT: If transcript is irrelevant noise or "potato salad":
+       - Set all scores to 0.
+       - Set fillerWordsCount to 0.
+       - Set overallFeedback to: "The input provided is irrelevant to the topic. Please stay on track."
+       - Set idealAnswer to a STANDARD sample answer.
+       - Return EMPTY arrays [] for strengths.
+    3. SCORING & POLISH (Normal Case):
+       - confidenceScore (1-10), clarityScore (1-10), structureScore (1-10).
+       - fillerWordsCount: Count ONLY actual filler words/crutches used in context (e.g. "um", "uh", "you know", "basically", "literally", "I mean", and "like" ONLY when used as a hesitation/filler crutch, NOT when used genuinely as a verb or preposition like "I like coding" or "looks like").
+       - idealAnswer: A 10% refactored version of user words using simple vocabulary.
+
+    JSON Structure ONLY:
+    {
+      "confidenceScore": number,
+      "clarityScore": number,
+      "structureScore": number,
+      "fillerWordsCount": number,
+      "answerLogic": "string",
+      "strengths": ["string"],
+      "weaknesses": ["string"],
+      "overallFeedback": "string",
+      "idealAnswer": "string",
+      "starMethodUsed": boolean|null
+    }
+
+providers:
+  - id: google:gemini-3.5-flash-lite
+    config:
+      apiKey: ${GEMINI_API_KEY_PRIMARY}
+
+tests:
+  - description: "STAR Method High Performer"
+    vars:
+      track: "Behavioral"
+      topic: "Tell me about a time you had a technical disagreement with a colleague."
+      transcript: "At my previous company, a teammate and I disagreed on whether to use PostgreSQL or DynamoDB for our user activity logging service. My task was to make a data-backed recommendation within two days. I ran benchmark tests comparing query latencies and wrote a one-page trade-off document. We reviewed it together and agreed PostgreSQL was best suited for our relational queries. As a result, we delivered the service on schedule with zero migration issues."
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "output.starMethodUsed === true && output.structureScore >= 8 && output.clarityScore >= 8"
+
+  - description: "Adversarial Off-Topic Potato Salad"
+    vars:
+      track: "Backend"
+      topic: "How do you handle database connection pooling in high-concurrency Node.js apps?"
+      transcript: "To make the best potato salad, boil small red potatoes until fork-tender. Mix with mayonnaise, yellow mustard, diced celery, and paprika. Chill for two hours before serving."
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "output.confidenceScore === 0 && output.clarityScore === 0 && output.structureScore === 0"
+      - type: contains
+        value: "irrelevant"
+

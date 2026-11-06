@@ -1,0 +1,120 @@
+[
+  {
+    "id": "tc_01_star_method_high_performer",
+    "name": "STAR Behavioral High Performer",
+    "track": "Interview Prep",
+    "isBehavioral": true,
+    "topic": "Tell me about a time you had a technical disagreement with a colleague.",
+    "transcript": "At my previous company, a teammate and I disagreed on whether to use PostgreSQL or DynamoDB for our user activity logging service. My task was to make a data-backed recommendation within two days. I ran benchmark tests comparing query latencies and wrote a one-page trade-off document. We reviewed it together and agreed PostgreSQL was best suited for our relational queries. As a result, we delivered the service on schedule with zero migration issues.",
+    "expected": {
+      "starMethodUsed": true,
+      "minConfidenceScore": 7,
+      "minClarityScore": 8,
+      "minStructureScore": 8,
+      "maxFillerWords": 1,
+      "feedbackMustNotContain": "irrelevant"
+    }
+  },
+  {
+    "id": "tc_02_rambling_heavy_filler",
+    "name": "Rambling Answer with Heavy Fillers",
+    "track": "Tech & CS",
+    "isBehavioral": false,
+    "topic": "Explain what the Virtual DOM is and how React reconciles changes.",
+    "transcript": "Um, so basically, virtual DOM is like, you know, a copy of the actual DOM in memory. And like, uh, when state changes, React like compares the two trees, basically diffing them. So, you know, it only updates the real DOM where needed.",
+    "expected": {
+      "minFillerWords": 4,
+      "maxClarityScore": 7,
+      "starMethodUsed": null,
+      "weaknessesMentionFiller": true
+    }
+  },
+  {
+    "id": "tc_03_filler_context_disambiguation",
+    "name": "Grammatical 'like' vs Filler Crutch",
+    "track": "Tech & CS",
+    "isBehavioral": false,
+    "topic": "Why do you prefer TypeScript over plain JavaScript?",
+    "transcript": "I like TypeScript because static type safety catches runtime bugs early. Tools like ESLint and the TypeScript compiler act like guardrails for the team.",
+    "expected": {
+      "fillerWordsCount": 0,
+      "minClarityScore": 7,
+      "starMethodUsed": null
+    }
+  },
+  {
+    "id": "tc_04_potato_salad_adversarial",
+    "name": "Adversarial Off-Topic ('Potato Salad' Test)",
+    "track": "Tech & CS",
+    "isBehavioral": false,
+    "topic": "How do you handle database connection pooling in high-concurrency Node.js apps?",
+    "transcript": "To make the best potato salad, boil small red potatoes until fork-tender. Mix with mayonnaise, yellow mustard, diced celery, and paprika. Chill for two hours before serving.",
+    "expected": {
+      "confidenceScore": 0,
+      "clarityScore": 0,
+      "structureScore": 0,
+      "fillerWordsCount": 0,
+      "feedbackContains": "irrelevant"
+    }
+  },
+  {
+    "id": "tc_05_invalid_session_silence",
+    "name": "Invalid Session / Under 3 Words Silence",
+    "track": "Tech & CS",
+    "isBehavioral": false,
+    "topic": "Walk me through how an HTTPS TLS handshake works.",
+    "transcript": "Hello there.",
+    "expected": {
+      "confidenceScore": 0,
+      "clarityScore": 0,
+      "structureScore": 0,
+      "fillerWordsCount": 0,
+      "feedbackContains": "couldn't hear you clearly"
+    }
+  },
+  {
+    "id": "tc_06_senior_system_design",
+    "name": "Senior Architecture & Technical Depth",
+    "track": "Tech & CS",
+    "isBehavioral": false,
+    "topic": "How do you prevent race conditions and double charges in financial transactions?",
+    "transcript": "To prevent double charges, we implement idempotency keys on every payment POST endpoint stored in Redis with an atomic SETNX. At the database layer, we enforce ACID transactions using PostgreSQL serializable isolation and SELECT FOR UPDATE row-level locking on account balance rows. Furthermore, we maintain an append-only immutable ledger table.",
+    "expected": {
+      "minConfidenceScore": 7,
+      "minClarityScore": 7,
+      "minStructureScore": 7,
+      "maxConfidenceScore": 9,
+      "starMethodUsed": null,
+      "minStrengthsCount": 2
+    }
+  },
+  {
+    "id": "tc_07_vague_junior_answer",
+    "name": "Vague Junior Answer (Lacks Depth)",
+    "track": "Tech & CS",
+    "isBehavioral": false,
+    "topic": "How does index scanning work in relational databases?",
+    "transcript": "Indexes make queries fast. Instead of looking at everything, the database uses an index to find the data faster like in a book.",
+    "expected": {
+      "maxConfidenceScore": 6,
+      "maxStructureScore": 6,
+      "starMethodUsed": null,
+      "minWeaknessesCount": 1
+    }
+  },
+  {
+    "id": "tc_08_startup_pitch",
+    "name": "Startup Pitch Track (Hook, Value Prop & CTA)",
+    "track": "Creative Pitch",
+    "isBehavioral": false,
+    "topic": "Pitch a developer tool that automates database migrations in 60 seconds.",
+    "transcript": "Database migrations are terrifying. One wrong ALTER TABLE can lock your production database and cause hours of downtime. That's why we built MigrateFlow. It safely simulates zero-downtime schema changes on your real data in an ephemeral shadow database before applying them to production. If an unsafe lock is detected, it automatically suggests the safe alternative. Join over 500 engineering teams who never stress over Friday deployments.",
+    "expected": {
+      "minConfidenceScore": 8,
+      "minClarityScore": 8,
+      "minStructureScore": 8,
+      "starMethodUsed": null,
+      "minStrengthsCount": 2
+    }
+  }
+]

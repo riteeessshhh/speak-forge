@@ -43,14 +43,28 @@ export const countCachedTopics = async (client, track, difficulty) => {
   return parseInt(result.rows[0].count);
 };
 
+export const countUnseenTopics = async (client, track, difficulty, userId) => {
+  const result = await client.query(
+    `SELECT COUNT(*)::int as count
+     FROM generated_topics g
+     LEFT JOIN sessions s 
+       ON g.topic_text = s.topic_text 
+       AND s.user_id = $3
+     WHERE g.track_name = $1 
+       AND g.difficulty = $2 
+       AND s.session_id IS NULL`,
+    [track, difficulty, userId]
+  );
+  return result.rows[0].count;
+};
+
 export const getUnseenTopic = async (client, track, difficulty, userId) => {
   const result = await client.query(
     `SELECT g.id, g.topic_text, g.is_behavioral
      FROM generated_topics g
      LEFT JOIN sessions s 
        ON g.topic_text = s.topic_text 
-       AND s.user_id = $3 
-       AND s.created_at >= NOW() - INTERVAL '12 hours'
+       AND s.user_id = $3
      WHERE g.track_name = $1 
        AND g.difficulty = $2 
        AND s.session_id IS NULL

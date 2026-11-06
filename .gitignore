@@ -29,3 +29,6 @@ repomix-output.xml
 *.njsproj
 *.sln
 *.sw?
+
+# Private Study Notes
+SpeakForge_Interview_Notes.md

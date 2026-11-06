@@ -24,17 +24,24 @@ const rotateKey = () => {
   return true;
 };
 
-// Default model — gemini-1.5-flash
-const DEFAULT_MODEL = "gemini-1.5-flash";
+// Default model — gemini-3.5-flash-lite
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
 /**
  * Generate content using Gemini with automatic key rotation on quota limits.
+ * Native JSON mode (responseMimeType: 'application/json') is enabled by default.
  */
-export const generateContent = async (prompt, modelName = DEFAULT_MODEL) => {
+export const generateContent = async (prompt, modelName = DEFAULT_MODEL, config = {}) => {
+  const requestConfig = {
+    responseMimeType: "application/json",
+    ...config,
+  };
+
   try {
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
+      config: requestConfig,
     });
     return response.text;
   } catch (error) {
@@ -48,6 +55,7 @@ export const generateContent = async (prompt, modelName = DEFAULT_MODEL) => {
         const response = await ai.models.generateContent({
           model: modelName,
           contents: prompt,
+          config: requestConfig,
         });
         return response.text;
       }
@@ -91,13 +99,16 @@ export const refillTopicCache = async (track, difficulty) => {
   log.info(`[Background] Refilling cache for ${track} - ${difficulty}`);
   const client = await pool.connect();
   try {
-    const prompt = `Track: "${track}", Difficulty: "${difficulty}". Generate 5 UNIQUE, creative, impromptu speaking questions. JSON array of objects ONLY. No markdown. Format: [{"text": "...", "isBehavioral": boolean}]. isBehavioral=true ONLY if past life/work example required.`;
+    const prompt = `Track: "${track}", Difficulty: "${difficulty}". Generate 5 UNIQUE, creative, impromptu speaking questions. JSON array of objects ONLY. Format: [{"text": "...", "isBehavioral": boolean}]. isBehavioral=true ONLY if past life/work example required.`;
     log.info(`[API Call] Gemini triggered (refillTopicCache)`);
     const text = await withExponentialBackoff(() => generateContent(prompt));
 
     let cleanText = text.trim();
-    if (cleanText.startsWith('```json')) cleanText = cleanText.replace(/```json\n?/, '').replace(/```\n?$/, '');
-    else if (cleanText.startsWith('```')) cleanText = cleanText.replace(/```\n?/, '').replace(/```\n?$/, '');
+    // Regex extraction fallback: extract JSON array [...] or object {} if surrounded by backticks or text
+    const jsonMatch = cleanText.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanText = jsonMatch[0];
+    }
 
     let topics = [];
     try {

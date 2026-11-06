@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-11-06T11:38:23.158Z",
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "passRate": 100,
+  "schemaConformanceRate": 100,
+  "averageLatencyMs": 3334,
+  "results": [
+    {
+      "id": "tc_07_vague_junior_answer",
+      "name": "Vague Junior Answer (Lacks Depth)",
+      "passed": true,
+      "latencyMs": 3334,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 4,
+        "clarity": 6,
+        "structure": 3,
+        "fillers": 1,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": {
+        "groundedness": 5,
+        "actionability": 5,
+        "idealAnswerQuality": 5,
+        "judgeSummary": "The AI coach provided an exceptional evaluation. It accurately identified the candidate's use of a basic book analogy while correctly pointing out the extreme lack of technical depth. The feedback was specific, highly actionable, and the provided ideal answer served as a textbook example of how to explain database index scanning effectively in a technical interview."
+      }
+    }
+  ]
+}

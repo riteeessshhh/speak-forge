@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "eval": "node evals/runner.js",
+    "eval:judge": "node evals/runner.js --judge"
   },
   "dependencies": {
     "@google/genai": "^1.52.0",
