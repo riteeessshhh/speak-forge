@@ -8,7 +8,8 @@ import {
   ChevronRight, RotateCcw, Square, BarChart3, LogOut, 
   Loader2, Play, CheckCircle2, History, X, ArrowLeft,
   Gauge, Timer, PauseCircle, Eye, Video, VideoOff,
-  TrendingUp, TrendingDown, Minus, ShieldAlert, Award, Brain
+  TrendingUp, TrendingDown, Minus, ShieldAlert, Award, Brain,
+  Bot, Users
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
@@ -343,6 +344,7 @@ function AppContent() {
         deliveryMetrics: data.deliveryMetrics || data.analysis?.deliveryMetrics,
         visualMetrics: data.visualMetrics || data.analysis?.visualMetrics,
         habitTrends: data.habitTrends || data.analysis?.habitTrends,
+        councilReports: data.analysis?.councilReports,
       });
       setPhase("analysis");
       toast.success("Analysis complete!");
@@ -696,6 +698,25 @@ function AppContent() {
               {/* PHASE: ANALYSIS */}
               {phase === "analysis" && analysisResult && (
                 <div className="animate-fade-in-up space-y-10 pb-20">
+                  {/* Multi-Agent Council Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-2 py-3 bg-zinc-900/30 border border-zinc-800/40 rounded-2xl">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[10px] font-black uppercase tracking-widest">
+                        <Bot className="w-3.5 h-3.5" />
+                        Multi-Agent Council
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                        Collaborative Evaluation Active
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-[10px] text-zinc-500 font-semibold">
+                      <span className="flex items-center gap-1 text-emerald-400/80">✓ Content Agent</span>
+                      <span className="flex items-center gap-1 text-cyan-400/80">✓ Presence Agent</span>
+                      <span className="flex items-center gap-1 text-amber-400/80">✓ Memory Agent</span>
+                      <span className="flex items-center gap-1 text-violet-400/80">✓ Lead Orchestrator</span>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     {[
                       { label: "Confidence", val: analysisResult.confidenceScore, color: "text-violet-400" },

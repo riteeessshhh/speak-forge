@@ -176,3 +176,4 @@ LONG-TERM HABIT COACHING RULES:
    - "recurringHabits": List of specific habits/weaknesses observed in both past sessions and today (e.g. ["Repeated 'basically' crutch", "Skipped trade-off analysis"]). Return [] if none repeated.
    - "milestonesAchieved": List of positive milestones unlocked today (e.g. ["Zero-Filler Session", "Stabilized pace from 180 to 142 WPM", "Improved eye contact from 50% to 85%"]). Return [] if none.`;
 }
+

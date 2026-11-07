@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { log } from './logger.js';
 import { generateContent, withExponentialBackoff } from './ai.js';
 import { formatMemoriesForPrompt } from './ragMemory.js';
+import { executeMultiAgentCouncil } from './coachingAgents.js';
 
 export const deliveryMetricsSchema = z.object({
   wordCount: z.number(),
@@ -301,7 +302,9 @@ export function parseAnalysisResponse(analysisText, fallbackFillerCount = 0) {
 }
 
 /**
- * Orchestrates prompt generation, model invocation, and parsing
+ * Orchestrates prompt generation, model invocation, and parsing.
+ * Primary: Multi-Agent Coaching Council (Content, Delivery, Memory, Lead Orchestrator).
+ * Fallback: Monolithic prompt.
  */
 export async function analyzeTranscript({
   topic,
@@ -314,6 +317,29 @@ export async function analyzeTranscript({
   fallbackFillerCount = 0,
   modelsToTry = FALLBACK_MODELS
 }) {
+  // ─── PRIMARY: MULTI-AGENT COACHING COUNCIL ───
+  try {
+    const councilResult = await executeMultiAgentCouncil({
+      topic,
+      track,
+      transcriptText,
+      isBehavioral,
+      deliveryMetrics,
+      visualMetrics,
+      memories,
+      fallbackFillerCount
+    });
+
+    return {
+      analysisJson: councilResult,
+      rawText: JSON.stringify(councilResult),
+      usedModel: "multi-agent-council"
+    };
+  } catch (agentError) {
+    log.warn("[Analysis] Multi-Agent Council encountered an issue, running monolithic fallback:", agentError.message);
+  }
+
+  // ─── FALLBACK: MONOLITHIC GEMINI PROMPT ───
   const prompt = buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral, deliveryMetrics, visualMetrics, memories });
   let analysisText;
   let usedModel = null;
