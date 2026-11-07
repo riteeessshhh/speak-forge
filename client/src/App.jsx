@@ -7,7 +7,8 @@ import {
   Building2, Cpu, Flame, Rocket, Shuffle, Sparkles, Mic, 
   ChevronRight, RotateCcw, Square, BarChart3, LogOut, 
   Loader2, Play, CheckCircle2, History, X, ArrowLeft,
-  Gauge, Timer, PauseCircle, Eye, Video, VideoOff
+  Gauge, Timer, PauseCircle, Eye, Video, VideoOff,
+  TrendingUp, TrendingDown, Minus, ShieldAlert, Award, Brain
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
@@ -340,7 +341,8 @@ function AppContent() {
       setAnalysisResult({ 
         ...data.analysis, 
         deliveryMetrics: data.deliveryMetrics || data.analysis?.deliveryMetrics,
-        visualMetrics: data.visualMetrics || data.analysis?.visualMetrics
+        visualMetrics: data.visualMetrics || data.analysis?.visualMetrics,
+        habitTrends: data.habitTrends || data.analysis?.habitTrends,
       });
       setPhase("analysis");
       toast.success("Analysis complete!");
@@ -879,6 +881,101 @@ function AppContent() {
                           <p className="text-[11px] font-semibold text-zinc-400">
                             {analysisResult.visualMetrics.smilesDetected > 0 ? `${analysisResult.visualMetrics.smilesDetected} warm smile moments` : 'Composed demeanor'}
                           </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Long-Term Habit Evolution & Blind Spots Card (RAG Vector Memory) */}
+                  {analysisResult.habitTrends && (
+                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-6 sm:p-8 space-y-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 pb-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                            <Brain className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">
+                                Habit Evolution & Blind Spots
+                              </h3>
+                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                RAG Memory
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-500 mt-0.5">Semantic memory tracking habit changes, breakthroughs, and recurring blind spots.</p>
+                          </div>
+                        </div>
+                        
+                        {/* Longitudinal Trend Badge */}
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <span className="text-xs font-semibold text-zinc-500">Habit Trend:</span>
+                          <span className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-xl flex items-center gap-1.5 border ${
+                            analysisResult.habitTrends.trend === 'improving'
+                              ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
+                              : analysisResult.habitTrends.trend === 'regressing'
+                              ? 'bg-rose-950/60 border-rose-500/40 text-rose-400'
+                              : analysisResult.habitTrends.trend === 'steady'
+                              ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-400'
+                              : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                          }`}>
+                            {analysisResult.habitTrends.trend === 'improving' && <TrendingUp className="w-3.5 h-3.5" />}
+                            {analysisResult.habitTrends.trend === 'regressing' && <TrendingDown className="w-3.5 h-3.5" />}
+                            {analysisResult.habitTrends.trend === 'steady' && <Minus className="w-3.5 h-3.5" />}
+                            {analysisResult.habitTrends.trend === 'baseline' && <History className="w-3.5 h-3.5" />}
+                            {analysisResult.habitTrends.trend.toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Personal Historical Comparison Narrative */}
+                      <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-2">
+                        <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block">
+                          Personal Progress Assessment
+                        </span>
+                        <p className="text-sm text-zinc-300 leading-relaxed italic">
+                          "{analysisResult.habitTrends.comparisonSummary}"
+                        </p>
+                      </div>
+
+                      {/* 2 Sub-panels: Recurring Blindspots vs Milestones */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {/* Recurring Blindspots */}
+                        <div className="bg-zinc-950/40 border border-zinc-800/40 p-4 rounded-2xl space-y-2">
+                          <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <ShieldAlert className="w-3.5 h-3.5" /> Recurring Blind Spots
+                          </span>
+                          {analysisResult.habitTrends.recurringHabits && analysisResult.habitTrends.recurringHabits.length > 0 ? (
+                            <ul className="space-y-1.5">
+                              {analysisResult.habitTrends.recurringHabits.map((habit, idx) => (
+                                <li key={idx} className="text-xs text-zinc-300 flex items-start gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
+                                  <span>{habit}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-zinc-500 italic">No recurring speech crutches or blind spots detected.</p>
+                          )}
+                        </div>
+
+                        {/* Unlocked Milestones */}
+                        <div className="bg-zinc-950/40 border border-zinc-800/40 p-4 rounded-2xl space-y-2">
+                          <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <Award className="w-3.5 h-3.5" /> Breakthroughs & Milestones
+                          </span>
+                          {analysisResult.habitTrends.milestonesAchieved && analysisResult.habitTrends.milestonesAchieved.length > 0 ? (
+                            <ul className="space-y-1.5">
+                              {analysisResult.habitTrends.milestonesAchieved.map((ms, idx) => (
+                                <li key={idx} className="text-xs text-emerald-300 flex items-start gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                                  <span>{ms}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-zinc-500 italic">Consistently practicing builds new milestone achievements.</p>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -14,6 +14,7 @@ import supabase from '../lib/supabase.js';
 import { verifyToken } from '../middleware/auth.js';
 import { analyzeTranscript } from '../lib/analysis.js';
 import { calculateDeliveryMetrics } from '../lib/deliveryMetrics.js';
+import { retrieveUserSessionMemories, storeSessionMemory } from '../lib/ragMemory.js';
 import { insertSession, insertRecording, insertAnalytics } from '../db/queries.js';
 
 const router = Router();
@@ -82,9 +83,19 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       return transcription;
     };
 
-    const [s3Url, transcriptionData] = await Promise.all([
+    const retrievePastMemories = async () => {
+      try {
+        return await retrieveUserSessionMemories(pool, userId, `${track}: ${topic}`);
+      } catch (e) {
+        log.warn("[RAG] Past memory retrieval skipped:", e.message);
+        return [];
+      }
+    };
+
+    const [s3Url, transcriptionData, pastMemories] = await Promise.all([
       uploadToSupabase(),
       transcribeWithGroq(),
+      retrievePastMemories(),
     ]);
 
     const transcriptText = (transcriptionData?.text || '').trim();
@@ -92,12 +103,13 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
 
     log.info(`Audio uploaded to Supabase: ${fileName}`);
     log.info(`Transcription complete: ${transcriptText.length} chars | Pace: ${deliveryMetrics.wpm} WPM (${deliveryMetrics.pacing}) | Pauses: ${deliveryMetrics.awkwardPausesCount}`);
+    log.info(`[RAG] Retrieved ${pastMemories.length} historical performance memories for habit comparison.`);
 
     // ─── 3. PRE-FILTER & FALLBACK FILLER COUNT ───
     const explicitFillerRegex = /\b(u[hm]+|uh|er|you know|I mean)\b/gi;
     const fallbackFillerCount = (transcriptText.match(explicitFillerRegex) || []).length;
 
-    // ─── 4. GEMINI LLM ANALYSIS (The 'Brutal Truth' Layer) ───
+    // ─── 4. GEMINI LLM ANALYSIS (The 'Brutal Truth' Layer with RAG Memory) ───
     const { analysisJson } = await analyzeTranscript({
       topic,
       track,
@@ -105,6 +117,7 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       isBehavioral: isBehavioralBool,
       deliveryMetrics,
       visualMetrics,
+      memories: pastMemories,
       fallbackFillerCount,
     });
     const finalFillerCount = analysisJson.fillerWordsCount;
@@ -129,6 +142,25 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       await client.query('COMMIT');
       log.info(`Session ${sessionId} committed successfully.`);
 
+      // Asynchronously store this session into the user's vector memory bank
+      storeSessionMemory(pool, {
+        sessionId,
+        userId,
+        trackName: track,
+        topicText: topic,
+        transcriptSummary: analysisJson.overallFeedback || '',
+        strengths: analysisJson.strengths || [],
+        weaknesses: analysisJson.weaknesses || [],
+        fillerWordCount: finalFillerCount,
+        wpm: deliveryMetrics?.wpm,
+        awkwardPauses: deliveryMetrics?.awkwardPausesCount,
+        eyeContactPercent: visualMetrics?.eyeContactPercent,
+        presenceScore: visualMetrics?.presenceScore,
+        confidenceScore: analysisJson.confidenceScore,
+        clarityScore: analysisJson.clarityScore,
+        structureScore: analysisJson.structureScore,
+      }).catch(err => log.error("[RAG] Background memory save failed:", err.message));
+
       res.json({
         success: true,
         sessionId,
@@ -136,6 +168,8 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
         analysis: analysisJson,
         deliveryMetrics,
         visualMetrics,
+        habitTrends: analysisJson.habitTrends,
+        pastMemoriesCount: pastMemories.length,
         audioUrl: s3Url,
       });
     } catch (dbError) {

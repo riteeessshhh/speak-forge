@@ -65,6 +65,38 @@ export const generateContent = async (prompt, modelName = DEFAULT_MODEL, config 
 };
 
 /**
+ * Generate 768-dimensional text embedding for RAG semantic search.
+ */
+export const embedContent = async (text, modelName = "gemini-embedding-001") => {
+  const cleanText = (text || '').trim();
+  if (!cleanText) return [];
+
+  const callEmbed = async () => {
+    const response = await ai.models.embedContent({
+      model: modelName,
+      contents: cleanText,
+      config: {
+        outputDimensionality: 768,
+      },
+    });
+    return response.embeddings?.[0]?.values || [];
+  };
+
+  try {
+    return await callEmbed();
+  } catch (error) {
+    const status = error.status || error.code || 500;
+    const msg = error.message || "";
+    if (status === 429 || msg.includes("Quota") || msg.includes("limit")) {
+      if (rotateKey()) {
+        return await callEmbed();
+      }
+    }
+    throw error;
+  }
+};
+
+/**
  * Exponential backoff wrapper for API calls.
  */
 export const withExponentialBackoff = async (fn, retries = 3, delay = 1000) => {

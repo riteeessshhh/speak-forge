@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import { log } from './logger.js';
 import { generateContent, withExponentialBackoff } from './ai.js';
+import { formatMemoriesForPrompt } from './ragMemory.js';
 
 export const deliveryMetricsSchema = z.object({
   wordCount: z.number(),
@@ -40,6 +41,13 @@ export const visualMetricsSchema = z.object({
   presenceScore: z.number().optional(),
 }).optional().nullable();
 
+export const habitTrendsSchema = z.object({
+  trend: z.enum(["improving", "steady", "regressing", "baseline"]),
+  comparisonSummary: z.string(),
+  recurringHabits: z.array(z.string()).default([]),
+  milestonesAchieved: z.array(z.string()).default([]),
+}).optional().nullable();
+
 export const analysisResultSchema = z.object({
   confidenceScore: z.number().min(0).max(10),
   clarityScore: z.number().min(0).max(10),
@@ -53,6 +61,7 @@ export const analysisResultSchema = z.object({
   starMethodUsed: z.boolean().nullable(),
   deliveryMetrics: deliveryMetricsSchema,
   visualMetrics: visualMetricsSchema,
+  habitTrends: habitTrendsSchema,
 });
 
 export const FALLBACK_MODELS = [
@@ -108,10 +117,11 @@ export function getTrackEvaluationInstructions(track = '', isBehavioral = false)
  * Builds the evaluation prompt for Gemini with strict score calibration,
  * track-specific rubrics, acoustic timing metrics, and high-quality exemplar ideal answers.
  */
-export function buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral = false, deliveryMetrics = null, visualMetrics = null }) {
+export function buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral = false, deliveryMetrics = null, visualMetrics = null, memories = [] }) {
   const wordCount = transcriptText?.trim().split(/\s+/).filter(w => w.length > 0).length || 0;
   const isInvalidSession = wordCount < 3;
   const trackInstructions = getTrackEvaluationInstructions(track, isBehavioral);
+  const memorySection = formatMemoriesForPrompt(memories);
 
   let deliverySection = '';
   if (deliveryMetrics && deliveryMetrics.durationSec > 0) {
@@ -164,6 +174,7 @@ Candidate Transcript: "${isInvalidSession ? "[INVALID_SESSION: NO VALID SPEECH D
 ${trackInstructions}
 ${deliverySection}
 ${visualSection}
+${memorySection}
 
 ════════════════════════════════════════════════════════════════
 STRICT EVALUATION RULES:
@@ -215,7 +226,13 @@ JSON Structure ONLY:
   "weaknesses": ["string"],
   "overallFeedback": "string",
   "idealAnswer": "string",
-  "starMethodUsed": boolean|null
+  "starMethodUsed": boolean|null,
+  "habitTrends": {
+    "trend": "improving"|"steady"|"regressing"|"baseline",
+    "comparisonSummary": "string",
+    "recurringHabits": ["string"],
+    "milestonesAchieved": ["string"]
+  }
 }`;
 }
 
@@ -257,6 +274,29 @@ export function parseAnalysisResponse(analysisText, fallbackFillerCount = 0) {
 
   analysisJson.fillerWordsCount = finalFillerCount;
 
+  // Ensure habitTrends is valid
+  if (!analysisJson.habitTrends || typeof analysisJson.habitTrends !== 'object') {
+    analysisJson.habitTrends = {
+      trend: "baseline",
+      comparisonSummary: "Baseline speaking session recorded. Future sessions will track recurring habits and improvements.",
+      recurringHabits: [],
+      milestonesAchieved: []
+    };
+  } else {
+    analysisJson.habitTrends.recurringHabits = Array.isArray(analysisJson.habitTrends.recurringHabits)
+      ? analysisJson.habitTrends.recurringHabits
+      : [];
+    analysisJson.habitTrends.milestonesAchieved = Array.isArray(analysisJson.habitTrends.milestonesAchieved)
+      ? analysisJson.habitTrends.milestonesAchieved
+      : [];
+    if (!["improving", "steady", "regressing", "baseline"].includes(analysisJson.habitTrends.trend)) {
+      analysisJson.habitTrends.trend = "steady";
+    }
+    if (!analysisJson.habitTrends.comparisonSummary) {
+      analysisJson.habitTrends.comparisonSummary = "Session recorded against personal history.";
+    }
+  }
+
   return analysisJson;
 }
 
@@ -270,10 +310,11 @@ export async function analyzeTranscript({
   isBehavioral = false,
   deliveryMetrics = null,
   visualMetrics = null,
+  memories = [],
   fallbackFillerCount = 0,
   modelsToTry = FALLBACK_MODELS
 }) {
-  const prompt = buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral, deliveryMetrics, visualMetrics });
+  const prompt = buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral, deliveryMetrics, visualMetrics, memories });
   let analysisText;
   let usedModel = null;
   let lastError;

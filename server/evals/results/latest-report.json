@@ -1,21 +1,21 @@
 {
-  "timestamp": "2026-11-07T14:06:28.423Z",
+  "timestamp": "2026-11-07T14:45:04.605Z",
   "total": 8,
   "passed": 8,
   "failed": 0,
   "passRate": 100,
   "schemaConformanceRate": 100,
-  "averageLatencyMs": 2478,
+  "averageLatencyMs": 5833,
   "results": [
     {
       "id": "tc_01_star_method_high_performer",
       "name": "STAR Behavioral High Performer",
       "passed": true,
-      "latencyMs": 3187,
+      "latencyMs": 3686,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 8,
-        "clarity": 8,
+        "clarity": 9,
         "structure": 8,
         "fillers": 0,
         "starMethodUsed": true
@@ -27,13 +27,13 @@
       "id": "tc_02_rambling_heavy_filler",
       "name": "Rambling Answer with Heavy Fillers",
       "passed": true,
-      "latencyMs": 2597,
-      "usedModel": "gemini-3.5-flash-lite",
+      "latencyMs": 16047,
+      "usedModel": "gemini-3.5-flash",
       "scores": {
-        "confidence": 5,
-        "clarity": 6,
+        "confidence": 4,
+        "clarity": 5,
         "structure": 4,
-        "fillers": 6,
+        "fillers": 9,
         "starMethodUsed": null
       },
       "failures": [],
@@ -43,7 +43,7 @@
       "id": "tc_03_filler_context_disambiguation",
       "name": "Grammatical 'like' vs Filler Crutch",
       "passed": true,
-      "latencyMs": 2459,
+      "latencyMs": 6590,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 6,
@@ -59,7 +59,7 @@
       "id": "tc_04_potato_salad_adversarial",
       "name": "Adversarial Off-Topic ('Potato Salad' Test)",
       "passed": true,
-      "latencyMs": 2180,
+      "latencyMs": 8584,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 0,
@@ -75,7 +75,7 @@
       "id": "tc_05_invalid_session_silence",
       "name": "Invalid Session / Under 3 Words Silence",
       "passed": true,
-      "latencyMs": 1482,
+      "latencyMs": 2559,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 0,
@@ -91,7 +91,7 @@
       "id": "tc_06_senior_system_design",
       "name": "Senior Architecture & Technical Depth",
       "passed": true,
-      "latencyMs": 2898,
+      "latencyMs": 3362,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 8,
@@ -107,12 +107,12 @@
       "id": "tc_07_vague_junior_answer",
       "name": "Vague Junior Answer (Lacks Depth)",
       "passed": true,
-      "latencyMs": 2357,
+      "latencyMs": 3053,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
-        "confidence": 4,
-        "clarity": 5,
-        "structure": 3,
+        "confidence": 5,
+        "clarity": 6,
+        "structure": 4,
         "fillers": 0,
         "starMethodUsed": null
       },
@@ -123,7 +123,7 @@
       "id": "tc_08_startup_pitch",
       "name": "Startup Pitch Track (Hook, Value Prop & CTA)",
       "passed": true,
-      "latencyMs": 2666,
+      "latencyMs": 2782,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 9,
