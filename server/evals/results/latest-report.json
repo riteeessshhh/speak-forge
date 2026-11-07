@@ -1,32 +1,139 @@
 {
-  "timestamp": "2026-11-06T11:38:23.158Z",
-  "total": 1,
-  "passed": 1,
+  "timestamp": "2026-11-07T14:06:28.423Z",
+  "total": 8,
+  "passed": 8,
   "failed": 0,
   "passRate": 100,
   "schemaConformanceRate": 100,
-  "averageLatencyMs": 3334,
+  "averageLatencyMs": 2478,
   "results": [
+    {
+      "id": "tc_01_star_method_high_performer",
+      "name": "STAR Behavioral High Performer",
+      "passed": true,
+      "latencyMs": 3187,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 8,
+        "clarity": 8,
+        "structure": 8,
+        "fillers": 0,
+        "starMethodUsed": true
+      },
+      "failures": [],
+      "judgeResult": null
+    },
+    {
+      "id": "tc_02_rambling_heavy_filler",
+      "name": "Rambling Answer with Heavy Fillers",
+      "passed": true,
+      "latencyMs": 2597,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 5,
+        "clarity": 6,
+        "structure": 4,
+        "fillers": 6,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": null
+    },
+    {
+      "id": "tc_03_filler_context_disambiguation",
+      "name": "Grammatical 'like' vs Filler Crutch",
+      "passed": true,
+      "latencyMs": 2459,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 6,
+        "clarity": 7,
+        "structure": 5,
+        "fillers": 0,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": null
+    },
+    {
+      "id": "tc_04_potato_salad_adversarial",
+      "name": "Adversarial Off-Topic ('Potato Salad' Test)",
+      "passed": true,
+      "latencyMs": 2180,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 0,
+        "clarity": 0,
+        "structure": 0,
+        "fillers": 0,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": null
+    },
+    {
+      "id": "tc_05_invalid_session_silence",
+      "name": "Invalid Session / Under 3 Words Silence",
+      "passed": true,
+      "latencyMs": 1482,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 0,
+        "clarity": 0,
+        "structure": 0,
+        "fillers": 0,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": null
+    },
+    {
+      "id": "tc_06_senior_system_design",
+      "name": "Senior Architecture & Technical Depth",
+      "passed": true,
+      "latencyMs": 2898,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 8,
+        "clarity": 9,
+        "structure": 8,
+        "fillers": 0,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": null
+    },
     {
       "id": "tc_07_vague_junior_answer",
       "name": "Vague Junior Answer (Lacks Depth)",
       "passed": true,
-      "latencyMs": 3334,
+      "latencyMs": 2357,
       "usedModel": "gemini-3.5-flash-lite",
       "scores": {
         "confidence": 4,
-        "clarity": 6,
+        "clarity": 5,
         "structure": 3,
-        "fillers": 1,
+        "fillers": 0,
         "starMethodUsed": null
       },
       "failures": [],
-      "judgeResult": {
-        "groundedness": 5,
-        "actionability": 5,
-        "idealAnswerQuality": 5,
-        "judgeSummary": "The AI coach provided an exceptional evaluation. It accurately identified the candidate's use of a basic book analogy while correctly pointing out the extreme lack of technical depth. The feedback was specific, highly actionable, and the provided ideal answer served as a textbook example of how to explain database index scanning effectively in a technical interview."
-      }
+      "judgeResult": null
+    },
+    {
+      "id": "tc_08_startup_pitch",
+      "name": "Startup Pitch Track (Hook, Value Prop & CTA)",
+      "passed": true,
+      "latencyMs": 2666,
+      "usedModel": "gemini-3.5-flash-lite",
+      "scores": {
+        "confidence": 9,
+        "clarity": 9,
+        "structure": 8,
+        "fillers": 0,
+        "starMethodUsed": null
+      },
+      "failures": [],
+      "judgeResult": null
     }
   ]
 }

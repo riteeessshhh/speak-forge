@@ -8,6 +8,38 @@ import { z } from 'zod';
 import { log } from './logger.js';
 import { generateContent, withExponentialBackoff } from './ai.js';
 
+export const deliveryMetricsSchema = z.object({
+  wordCount: z.number(),
+  durationSec: z.number(),
+  activeSpeakingSec: z.number(),
+  totalSilenceSec: z.number(),
+  silencePercentage: z.number(),
+  wpm: z.number(),
+  pacing: z.string(),
+  pacingDesc: z.string(),
+  pacingScore: z.number(),
+  badgeColor: z.string().optional(),
+  awkwardPausesCount: z.number(),
+  longestPauseSec: z.number(),
+  awkwardPauses: z.array(z.object({
+    timestamp: z.string(),
+    startSec: z.number(),
+    durationSec: z.number()
+  }))
+}).optional().nullable();
+
+export const visualMetricsSchema = z.object({
+  enabled: z.boolean().optional(),
+  eyeContactPercent: z.number().optional(),
+  eyeContactRating: z.string().optional(),
+  posture: z.string().optional(),
+  headStability: z.string().optional(),
+  expressiveness: z.string().optional(),
+  smilesDetected: z.number().optional(),
+  fidgetAlerts: z.number().optional(),
+  presenceScore: z.number().optional(),
+}).optional().nullable();
+
 export const analysisResultSchema = z.object({
   confidenceScore: z.number().min(0).max(10),
   clarityScore: z.number().min(0).max(10),
@@ -19,6 +51,8 @@ export const analysisResultSchema = z.object({
   overallFeedback: z.string(),
   idealAnswer: z.string(),
   starMethodUsed: z.boolean().nullable(),
+  deliveryMetrics: deliveryMetricsSchema,
+  visualMetrics: visualMetricsSchema,
 });
 
 export const FALLBACK_MODELS = [
@@ -72,12 +106,53 @@ export function getTrackEvaluationInstructions(track = '', isBehavioral = false)
 
 /**
  * Builds the evaluation prompt for Gemini with strict score calibration,
- * track-specific rubrics, and high-quality exemplar ideal answers.
+ * track-specific rubrics, acoustic timing metrics, and high-quality exemplar ideal answers.
  */
-export function buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral = false }) {
+export function buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral = false, deliveryMetrics = null, visualMetrics = null }) {
   const wordCount = transcriptText?.trim().split(/\s+/).filter(w => w.length > 0).length || 0;
   const isInvalidSession = wordCount < 3;
   const trackInstructions = getTrackEvaluationInstructions(track, isBehavioral);
+
+  let deliverySection = '';
+  if (deliveryMetrics && deliveryMetrics.durationSec > 0) {
+    const pauseDetail = deliveryMetrics.awkwardPausesCount > 0
+      ? `${deliveryMetrics.awkwardPausesCount} awkward freeze(s) detected (longest: ${deliveryMetrics.longestPauseSec}s at ${deliveryMetrics.awkwardPauses[0]?.timestamp || 'midway'})`
+      : `Fluid delivery with zero awkward freezes.`;
+
+    deliverySection = `
+════════════════════════════════════════════════════════════════
+VOICE DELIVERY & ACOUSTIC TIMING:
+════════════════════════════════════════════════════════════════
+- Speech Pace: ${deliveryMetrics.wpm} WPM (${deliveryMetrics.pacing} — ${deliveryMetrics.pacingDesc})
+- Recording Duration: ${deliveryMetrics.durationSec}s | Spoken Words: ${deliveryMetrics.wordCount}
+- Awkward Silences / Freezes (≥ 2.0s): ${pauseDetail}
+- Dead Air / Silence Ratio: ${deliveryMetrics.silencePercentage}% of recording spent paused
+
+DELIVERY COACHING RULE:
+- Naturally weave feedback on their speaking pace (${deliveryMetrics.wpm} WPM) and pause distribution into overallFeedback and Growth Areas.
+- If WPM is rushed (>170 WPM), explicitly instruct them to slow down and use tactical pauses for emphasis.
+- If WPM is slow (<115 WPM), coach them to build momentum and speak with more energy.
+- If awkward freezes occurred, advise on verbal bridging tactics (e.g. "That's a nuanced question; let's break it down into two main factors...") to eliminate dead air.`;
+  }
+
+  let visualSection = '';
+  if (visualMetrics && visualMetrics.enabled) {
+    visualSection = `
+════════════════════════════════════════════════════════════════
+VISUAL PRESENCE & BODY LANGUAGE (In-Browser Vision Tracking):
+════════════════════════════════════════════════════════════════
+- Eye Contact: ${visualMetrics.eyeContactPercent}% (${visualMetrics.eyeContactRating})
+- Posture: ${visualMetrics.posture}
+- Head & Presence Stability: ${visualMetrics.headStability} (${visualMetrics.fidgetAlerts} sudden movement alerts)
+- Facial Expressiveness: ${visualMetrics.expressiveness} (${visualMetrics.smilesDetected} warm smile moments)
+- Visual Presence Score: ${visualMetrics.presenceScore}/10
+
+BODY LANGUAGE COACHING RULE:
+- Naturally incorporate their visual presence and eye contact into overallFeedback, strengths, and weaknesses.
+- Commend strong eye contact (≥75%) and upright posture when evident.
+- If eye contact was low (<65%), coach them to anchor their gaze on the camera lens to project confidence.
+- If posture was slouched or excessive fidgeting was detected, offer constructive advice on maintaining grounded physical presence.`;
+  }
 
   return `You are a Principal Technical Interviewer and Executive Speech Coach.
 Analyze this interview response.
@@ -87,6 +162,8 @@ Track: ${track}
 Candidate Transcript: "${isInvalidSession ? "[INVALID_SESSION: NO VALID SPEECH DETECTED]" : transcriptText}"
 
 ${trackInstructions}
+${deliverySection}
+${visualSection}
 
 ════════════════════════════════════════════════════════════════
 STRICT EVALUATION RULES:
@@ -191,10 +268,12 @@ export async function analyzeTranscript({
   track,
   transcriptText,
   isBehavioral = false,
+  deliveryMetrics = null,
+  visualMetrics = null,
   fallbackFillerCount = 0,
   modelsToTry = FALLBACK_MODELS
 }) {
-  const prompt = buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral });
+  const prompt = buildAnalysisPrompt({ topic, track, transcriptText, isBehavioral, deliveryMetrics, visualMetrics });
   let analysisText;
   let usedModel = null;
   let lastError;
@@ -224,6 +303,13 @@ export async function analyzeTranscript({
   }
 
   const analysisJson = parseAnalysisResponse(analysisText, fallbackFillerCount);
+  if (deliveryMetrics) {
+    analysisJson.deliveryMetrics = deliveryMetrics;
+  }
+  if (visualMetrics) {
+    analysisJson.visualMetrics = visualMetrics;
+  }
+
   return {
     analysisJson,
     rawText: analysisText,

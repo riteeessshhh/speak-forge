@@ -13,6 +13,7 @@ import pool from '../db/pool.js';
 import supabase from '../lib/supabase.js';
 import { verifyToken } from '../middleware/auth.js';
 import { analyzeTranscript } from '../lib/analysis.js';
+import { calculateDeliveryMetrics } from '../lib/deliveryMetrics.js';
 import { insertSession, insertRecording, insertAnalytics } from '../db/queries.js';
 
 const router = Router();
@@ -21,10 +22,19 @@ const upload = multer({ storage });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
-  const { track, difficulty, topic, isBehavioral } = req.body;
+  const { track, difficulty, topic, isBehavioral, visualMetrics: rawVisualMetrics } = req.body;
   const userId = req.user.id;
   const isBehavioralBool = isBehavioral === 'true' || isBehavioral === true;
   const audioFile = req.file;
+
+  let visualMetrics = null;
+  if (rawVisualMetrics) {
+    try {
+      visualMetrics = typeof rawVisualMetrics === 'string' ? JSON.parse(rawVisualMetrics) : rawVisualMetrics;
+    } catch (e) {
+      log.warn("Failed to parse visualMetrics from request body");
+    }
+  }
 
   if (!audioFile) {
     return res.status(400).json({ error: 'No audio file provided' });
@@ -67,18 +77,21 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       const transcription = await groq.audio.transcriptions.create({
         file: await toFile(audioFile.buffer, fileName),
         model: "whisper-large-v3",
-        response_format: "json",
+        response_format: "verbose_json",
       });
-      return transcription.text;
+      return transcription;
     };
 
-    const [s3Url, transcriptText] = await Promise.all([
+    const [s3Url, transcriptionData] = await Promise.all([
       uploadToSupabase(),
       transcribeWithGroq(),
     ]);
 
+    const transcriptText = (transcriptionData?.text || '').trim();
+    const deliveryMetrics = calculateDeliveryMetrics(transcriptionData);
+
     log.info(`Audio uploaded to Supabase: ${fileName}`);
-    log.info(`Transcription complete: ${transcriptText.length} chars`);
+    log.info(`Transcription complete: ${transcriptText.length} chars | Pace: ${deliveryMetrics.wpm} WPM (${deliveryMetrics.pacing}) | Pauses: ${deliveryMetrics.awkwardPausesCount}`);
 
     // ─── 3. PRE-FILTER & FALLBACK FILLER COUNT ───
     const explicitFillerRegex = /\b(u[hm]+|uh|er|you know|I mean)\b/gi;
@@ -90,6 +103,8 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       track,
       transcriptText,
       isBehavioral: isBehavioralBool,
+      deliveryMetrics,
+      visualMetrics,
       fallbackFillerCount,
     });
     const finalFillerCount = analysisJson.fillerWordsCount;
@@ -119,6 +134,8 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
         sessionId,
         transcript: transcriptText,
         analysis: analysisJson,
+        deliveryMetrics,
+        visualMetrics,
         audioUrl: s3Url,
       });
     } catch (dbError) {

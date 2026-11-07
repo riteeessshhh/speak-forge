@@ -6,18 +6,21 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { 
   Building2, Cpu, Flame, Rocket, Shuffle, Sparkles, Mic, 
   ChevronRight, RotateCcw, Square, BarChart3, LogOut, 
-  Loader2, Play, CheckCircle2, History, X, ArrowLeft
+  Loader2, Play, CheckCircle2, History, X, ArrowLeft,
+  Gauge, Timer, PauseCircle, Eye, Video, VideoOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
 import { getRandomTopic, getTopicCount } from "./data/topics";
 import CountdownTimer from "./components/CountdownTimer";
 import { useAudioRecorder } from "./hooks/useAudioRecorder";
+import { useVisionPresence } from "./hooks/useVisionPresence";
 import { UserProvider, useAuth } from "./contexts/UserContext";
 import AuthView from "./components/AuthView";
 import Dashboard from "./components/Dashboard";
 import AudioVisualizer from "./components/AudioVisualizer";
 import AudioPlayer from "./components/AudioPlayer";
+import CameraPreview from "./components/CameraPreview";
 import Skeleton, { SkeletonText } from "./components/Skeleton";
 
 /* ── Card data ── */
@@ -135,6 +138,7 @@ function AppContent() {
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const { status, isRecording, audioUrl, audioBlob, stream, startRecording, stopRecording, clearAudio } = useAudioRecorder();
+  const vision = useVisionPresence();
 
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
@@ -267,6 +271,7 @@ function AppContent() {
 
     try {
       await startRecording();
+      vision.startTracking();
       clearTimeout(permissionTimeout);
       console.log("[App] Recording started, successfully set state");
       setPhase("recording");
@@ -275,10 +280,11 @@ function AppContent() {
       console.error("[App] Failed to start recording:", err);
       toast.error("Microphone access is required.");
     }
-  }, [startRecording]);
+  }, [startRecording, vision]);
 
   const handleFinishSpeaking = () => {
     stopRecording();
+    vision.stopTracking();
   };
 
   useEffect(() => {
@@ -294,6 +300,7 @@ function AppContent() {
 
   const handleReset = () => {
     clearAudio();
+    vision.stopCamera();
     setPhase("selection");
     setSelectedArena(null);
     setSelectedDifficulty(null);
@@ -313,6 +320,9 @@ function AppContent() {
       formData.append('difficulty', currentTopic.difficulty);
       formData.append('topic', currentTopic.topic);
       formData.append('isBehavioral', currentTopic.isBehavioral || false);
+      if (vision.visualSummary) {
+        formData.append('visualMetrics', JSON.stringify(vision.visualSummary));
+      }
       formData.append('audio', audioBlob, `recording.${extension}`);
 
       const response = await fetch(`${API_URL}/api/upload`, {
@@ -327,7 +337,11 @@ function AppContent() {
       }
 
       const data = await response.json();
-      setAnalysisResult(data.analysis);
+      setAnalysisResult({ 
+        ...data.analysis, 
+        deliveryMetrics: data.deliveryMetrics || data.analysis?.deliveryMetrics,
+        visualMetrics: data.visualMetrics || data.analysis?.visualMetrics
+      });
       setPhase("analysis");
       toast.success("Analysis complete!");
     } catch (err) {
@@ -485,6 +499,18 @@ function AppContent() {
                           </div>
                         </div>
 
+                        {/* Camera Presence Setting */}
+                        <div className="pt-2 border-t border-zinc-800/40">
+                          <CameraPreview
+                            videoRef={vision.videoRef}
+                            isCameraActive={vision.isCameraActive}
+                            isModelLoading={vision.isModelLoading}
+                            faceDetected={vision.faceDetected}
+                            liveEyeContact={vision.liveEyeContact}
+                            toggleCamera={vision.toggleCamera}
+                          />
+                        </div>
+
                         {/* Desktop Action Button */}
                         <div className="hidden lg:block">
                           <button
@@ -561,6 +587,20 @@ function AppContent() {
                         {currentTopic?.topic}
                       </h2>
                     </div>
+
+                    {/* Live Camera HUD if Camera is Active */}
+                    {vision.isCameraActive && (
+                      <div className="max-w-xs mx-auto w-full pt-1">
+                        <CameraPreview
+                          videoRef={vision.videoRef}
+                          isCameraActive={vision.isCameraActive}
+                          isModelLoading={vision.isModelLoading}
+                          faceDetected={vision.faceDetected}
+                          liveEyeContact={vision.liveEyeContact}
+                          toggleCamera={vision.toggleCamera}
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <div className={`font-mono text-sm transition-colors duration-300 ${recordingTime >= 54 ? "text-amber-500" : "text-zinc-500"}`}>
@@ -667,6 +707,182 @@ function AppContent() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Delivery & Acoustic Rhythm Card */}
+                  {analysisResult.deliveryMetrics && (
+                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-6 sm:p-8 space-y-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 pb-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                            <Gauge className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">
+                                Speech Delivery & Rhythm
+                              </h3>
+                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                Acoustic AI
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-500 mt-0.5">Cadence, speaking pace, and pause distribution.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <span className="text-xs font-semibold text-zinc-500">Rhythm Score:</span>
+                          <span className="text-sm font-black text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-3 py-1 rounded-xl">
+                            {analysisResult.deliveryMetrics.pacingScore}<span className="text-xs opacity-50">/10</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 3 Delivery Metrics */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Pace */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+                            <span>Speaking Pace</span>
+                            <Timer className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-black text-zinc-100">{analysisResult.deliveryMetrics.wpm}</span>
+                            <span className="text-xs text-zinc-500 font-semibold">WPM</span>
+                          </div>
+                          <p className="text-[11px] font-semibold text-emerald-400">
+                            {analysisResult.deliveryMetrics.pacingDesc}
+                          </p>
+                        </div>
+
+                        {/* Freezes */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+                            <span>Awkward Freezes (≥2s)</span>
+                            <PauseCircle className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-black text-zinc-100">{analysisResult.deliveryMetrics.awkwardPausesCount}</span>
+                            <span className="text-xs text-zinc-500 font-semibold">{analysisResult.deliveryMetrics.awkwardPausesCount === 1 ? 'freeze' : 'freezes'}</span>
+                          </div>
+                          <p className={`text-[11px] font-semibold ${analysisResult.deliveryMetrics.awkwardPausesCount === 0 ? 'text-zinc-400' : 'text-amber-400'}`}>
+                            {analysisResult.deliveryMetrics.awkwardPausesCount === 0
+                              ? '✓ Fluid flow, no dead air'
+                              : `Longest freeze: ${analysisResult.deliveryMetrics.longestPauseSec}s`}
+                          </p>
+                        </div>
+
+                        {/* Speech vs Silence */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+                            <span>Talk vs Dead Air</span>
+                            <span className="text-zinc-500 font-bold">{analysisResult.deliveryMetrics.durationSec}s</span>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-black text-zinc-100">
+                              {100 - analysisResult.deliveryMetrics.silencePercentage}%
+                            </span>
+                            <span className="text-xs text-zinc-500 font-semibold">active speaking</span>
+                          </div>
+                          <p className="text-[11px] font-semibold text-zinc-400">
+                            {analysisResult.deliveryMetrics.totalSilenceSec}s total silence ({analysisResult.deliveryMetrics.silencePercentage}%)
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Visual Flow Bar */}
+                      <div className="space-y-2 pt-1">
+                        <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                          <span className="text-emerald-400">Active Speaking ({100 - analysisResult.deliveryMetrics.silencePercentage}%)</span>
+                          <span className="text-zinc-400">Paused / Dead Air ({analysisResult.deliveryMetrics.silencePercentage}%)</span>
+                        </div>
+                        <div className="h-2 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
+                          <div 
+                            className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full"
+                            style={{ width: `${Math.max(5, 100 - analysisResult.deliveryMetrics.silencePercentage)}%` }}
+                          />
+                          <div 
+                            className="h-full bg-zinc-700/80"
+                            style={{ width: `${analysisResult.deliveryMetrics.silencePercentage}%` }}
+                          />
+                        </div>
+                        {analysisResult.deliveryMetrics.awkwardPauses?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            {analysisResult.deliveryMetrics.awkwardPauses.map((p, idx) => (
+                              <span key={idx} className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                                ⏸️ {p.durationSec}s pause at {p.timestamp}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Visual Presence & Body Language Card */}
+                  {analysisResult.visualMetrics && analysisResult.visualMetrics.enabled && (
+                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-6 sm:p-8 space-y-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 pb-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                            <Eye className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">
+                                Visual Presence & Body Language
+                              </h3>
+                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                MediaPipe Vision
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-500 mt-0.5">Eye contact ratio, posture alignment, and non-verbal presence.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <span className="text-xs font-semibold text-zinc-500">Presence Score:</span>
+                          <span className="text-sm font-black text-indigo-400 bg-indigo-950/60 border border-indigo-800/50 px-3 py-1 rounded-xl">
+                            {analysisResult.visualMetrics.presenceScore}<span className="text-xs opacity-50">/10</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 4 Visual Presence Metrics */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {/* Eye Contact */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Eye Contact</span>
+                          <div className="text-2xl font-black text-zinc-100">{analysisResult.visualMetrics.eyeContactPercent}%</div>
+                          <p className={`text-[11px] font-semibold ${analysisResult.visualMetrics.eyeContactPercent >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {analysisResult.visualMetrics.eyeContactRating}
+                          </p>
+                        </div>
+
+                        {/* Posture */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Posture</span>
+                          <div className="text-base font-bold text-zinc-200 truncate">{analysisResult.visualMetrics.posture}</div>
+                          <p className="text-[11px] font-semibold text-zinc-400">Head & neck alignment</p>
+                        </div>
+
+                        {/* Stability */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Composure</span>
+                          <div className="text-base font-bold text-zinc-200 truncate">{analysisResult.visualMetrics.headStability}</div>
+                          <p className="text-[11px] font-semibold text-zinc-400">
+                            {analysisResult.visualMetrics.fidgetAlerts === 0 ? '✓ Grounded stillness' : `${analysisResult.visualMetrics.fidgetAlerts} sudden movements`}
+                          </p>
+                        </div>
+
+                        {/* Expressiveness */}
+                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
+                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Expression</span>
+                          <div className="text-base font-bold text-zinc-200 truncate">{analysisResult.visualMetrics.expressiveness}</div>
+                          <p className="text-[11px] font-semibold text-zinc-400">
+                            {analysisResult.visualMetrics.smilesDetected > 0 ? `${analysisResult.visualMetrics.smilesDetected} warm smile moments` : 'Composed demeanor'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid lg:grid-cols-5 gap-10">
                     <div className="lg:col-span-3 space-y-8">
