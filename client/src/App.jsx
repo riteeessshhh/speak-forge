@@ -9,7 +9,7 @@ import {
   Loader2, Play, CheckCircle2, History, X, ArrowLeft,
   Gauge, Timer, PauseCircle, Eye, Video, VideoOff,
   TrendingUp, TrendingDown, Minus, ShieldAlert, Award, Brain,
-  Bot, Users
+  Bot, Users, Copy, Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
@@ -136,6 +136,7 @@ function AppContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [copiedExemplar, setCopiedExemplar] = useState(false);
   const isSessionActive = ["thinking", "recording", "review"].includes(phase);
 
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -311,6 +312,14 @@ function AppContent() {
     setShowDashboard(false);
   };
 
+  const handleCopyExemplar = () => {
+    if (!analysisResult?.idealAnswer) return;
+    navigator.clipboard?.writeText(analysisResult.idealAnswer);
+    setCopiedExemplar(true);
+    toast.success("Model response copied to clipboard!");
+    setTimeout(() => setCopiedExemplar(false), 2000);
+  };
+
   const handleSubmitForAnalysis = async () => {
     if (!audioBlob) return;
     setIsAnalyzing(true);
@@ -366,7 +375,7 @@ function AppContent() {
   if (!isAuthenticated) return <AuthView />;
 
   return (
-    <div className="lg:h-screen lg:overflow-hidden bg-zinc-950 text-white flex flex-col selection:bg-violet-500/30">
+    <div className="min-h-screen bg-zinc-950 text-white flex flex-col selection:bg-violet-500/30">
       {/* Top Progress Bar */}
       <div 
         className="fixed top-0 left-0 h-0.5 bg-gradient-to-r from-violet-600 via-emerald-500 to-sky-500 z-50 transition-all duration-1000 ease-out" 
@@ -374,8 +383,8 @@ function AppContent() {
       />
 
       {/* Header */}
-      <header className="border-b border-zinc-800/50 px-4 lg:px-6 py-3 flex items-center justify-between bg-zinc-950/50 backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center gap-3 lg:gap-6">
+      <header className="border-b border-zinc-800/50 px-4 sm:px-6 py-3 flex items-center justify-between bg-zinc-950/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="flex items-center gap-3 sm:gap-6">
           <div className="flex items-center gap-2 cursor-pointer flex-shrink-0" onClick={handleReset}>
             <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center glow-primary">
               <Mic className="w-4 h-4 text-violet-400" />
@@ -386,45 +395,45 @@ function AppContent() {
           {isSessionActive && (
             <>
               <div className="h-4 w-[1px] bg-zinc-800 mx-1 hidden sm:block" />
-                <button
-                  onClick={handleReset}
-                  className="group flex items-center justify-center gap-2 ml-4 lg:ml-0 w-10 h-10 lg:w-auto lg:h-auto text-zinc-500 hover:text-zinc-200 transition-colors text-[11px] font-medium uppercase tracking-[0.1em] cursor-pointer"
-                >
-                  <ArrowLeft className="w-4 h-4 lg:w-3.5 lg:h-3.5 transition-transform group-hover:-translate-x-0.5" />
-                  <span className="hidden sm:inline">Exit Session</span>
-                </button>
-              </>
-            )}
-          </div>
-            
-            <div className="flex items-center gap-3">
-              {!isSessionActive ? (
-                <>
-                  <HeaderButton 
-                    onClick={() => setShowDashboard(!showDashboard)}
-                    icon={BarChart3}
-                    label="Analytics"
-                    variant="primary"
-                  />
-                  
-                  <HeaderButton 
-                    onClick={logout}
-                    icon={LogOut}
-                    label="Logout"
-                    variant="secondary"
-                  />
-                </>
-              ) : (
-                <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 text-violet-400 text-[10px] font-bold uppercase tracking-widest animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
-                  <span className="hidden sm:inline">Session Active</span>
-                </div>
-              )}
+              <button
+                onClick={handleReset}
+                className="group flex items-center justify-center gap-2 ml-2 sm:ml-0 text-zinc-500 hover:text-zinc-200 transition-colors text-[11px] font-medium uppercase tracking-[0.1em] cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+                <span className="hidden sm:inline">Exit Session</span>
+              </button>
+            </>
+          )}
+        </div>
+          
+        <div className="flex items-center gap-3">
+          {!isSessionActive ? (
+            <>
+              <HeaderButton 
+                onClick={() => setShowDashboard(!showDashboard)}
+                icon={BarChart3}
+                label="Analytics"
+                variant="primary"
+              />
+              
+              <HeaderButton 
+                onClick={logout}
+                icon={LogOut}
+                label="Logout"
+                variant="secondary"
+              />
+            </>
+          ) : (
+            <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 text-violet-400 text-[10px] font-bold uppercase tracking-widest animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+              <span className="hidden sm:inline">Session Active</span>
             </div>
-        </header>
+          )}
+        </div>
+      </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col px-4 lg:px-8 py-6 mt-4 lg:mt-0 lg:pt-6 lg:pb-12 overflow-y-auto lg:overflow-hidden">
+      <main className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-5 sm:py-7 overflow-y-auto">
         <div className="max-w-7xl w-full mx-auto flex-1 flex flex-col min-h-0">
           {showDashboard ? (
             <Dashboard onBack={() => setShowDashboard(false)} />
@@ -461,12 +470,12 @@ function AppContent() {
                       <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 mb-4 self-start">
                         <Rocket className="w-3 h-3" /> 1. Select Arena
                       </h2>
-                      <div className="flex flex-wrap gap-4 lg:overflow-y-auto lg:pr-4 pt-2 pb-8 justify-center items-start">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 w-full pt-1 pb-6">
                         {arenaCards.map((card) => (
                           <motion.div 
                             layout
                             key={card.id} 
-                            className="w-full sm:w-[calc(50%-8px)] lg:w-[calc(33.33%-12px)] min-w-full sm:min-w-[260px] p-1"
+                            className="w-full"
                           >
                             <ArenaCard
                               {...card}
@@ -697,362 +706,395 @@ function AppContent() {
 
               {/* PHASE: ANALYSIS */}
               {phase === "analysis" && analysisResult && (
-                <div className="animate-fade-in-up space-y-10 pb-20">
-                  {/* Multi-Agent Council Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-2 py-3 bg-zinc-900/30 border border-zinc-800/40 rounded-2xl">
-                    <div className="flex items-center gap-2.5">
+                <div className="animate-fade-in-up space-y-6 pb-16 w-full max-w-7xl mx-auto">
+                  {/* ── Top Bar: Multi-Agent Council Status & Quick Actions ── */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-zinc-900/40 border border-zinc-800/50 rounded-2xl">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-[10px] font-black uppercase tracking-widest">
                         <Bot className="w-3.5 h-3.5" />
                         Multi-Agent Council
                       </div>
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                        Collaborative Evaluation Active
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-zinc-400">
+                        <span className="flex items-center gap-1 text-emerald-400 font-semibold">✓ Content</span>
+                        <span className="text-zinc-600">•</span>
+                        <span className="flex items-center gap-1 text-cyan-400 font-semibold">✓ Presence</span>
+                        <span className="text-zinc-600">•</span>
+                        <span className="flex items-center gap-1 text-amber-400 font-semibold">✓ Memory</span>
+                        <span className="text-zinc-600">•</span>
+                        <span className="flex items-center gap-1 text-violet-400 font-semibold">✓ Lead Coach</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 self-end sm:self-auto">
+                      <button
+                        onClick={handleReset}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-zinc-950 font-black text-xs uppercase tracking-wider hover:bg-zinc-200 transition-all cursor-pointer shadow-lg shadow-white/5"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>New Session</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Metric Ribbon (All Vital Scores in One Compact Row) ── */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+                    {/* Confidence */}
+                    <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 sm:p-3.5 rounded-2xl text-center">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Confidence</span>
+                      <div className="text-2xl font-black text-violet-400">
+                        {analysisResult.confidenceScore}<span className="text-xs opacity-40 font-normal">/10</span>
+                      </div>
+                    </div>
+
+                    {/* Clarity */}
+                    <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 sm:p-3.5 rounded-2xl text-center">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Clarity</span>
+                      <div className="text-2xl font-black text-emerald-400">
+                        {analysisResult.clarityScore}<span className="text-xs opacity-40 font-normal">/10</span>
+                      </div>
+                    </div>
+
+                    {/* Structure */}
+                    <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 sm:p-3.5 rounded-2xl text-center">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Structure</span>
+                      <div className="text-2xl font-black text-amber-400">
+                        {analysisResult.structureScore}<span className="text-xs opacity-40 font-normal">/10</span>
+                      </div>
+                    </div>
+
+                    {/* Fillers */}
+                    <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 sm:p-3.5 rounded-2xl text-center">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Fillers</span>
+                      <div className="text-2xl font-black text-rose-400">
+                        {analysisResult.fillerWordsCount}
+                      </div>
+                    </div>
+
+                    {/* Speaking Pace (WPM) */}
+                    <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 sm:p-3.5 rounded-2xl text-center">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Pacing</span>
+                      <div className="text-2xl font-black text-cyan-400">
+                        {analysisResult.deliveryMetrics?.wpm || "—"}<span className="text-xs font-normal text-zinc-500 ml-1">WPM</span>
+                      </div>
+                    </div>
+
+                    {/* Presence or Rhythm */}
+                    <div className="bg-zinc-900/50 border border-zinc-800/60 p-3 sm:p-3.5 rounded-2xl text-center">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">
+                        {analysisResult.visualMetrics?.enabled ? "Visual Score" : "Rhythm"}
                       </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-[10px] text-zinc-500 font-semibold">
-                      <span className="flex items-center gap-1 text-emerald-400/80">✓ Content Agent</span>
-                      <span className="flex items-center gap-1 text-cyan-400/80">✓ Presence Agent</span>
-                      <span className="flex items-center gap-1 text-amber-400/80">✓ Memory Agent</span>
-                      <span className="flex items-center gap-1 text-violet-400/80">✓ Lead Orchestrator</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {[
-                      { label: "Confidence", val: analysisResult.confidenceScore, color: "text-violet-400" },
-                      { label: "Clarity", val: analysisResult.clarityScore, color: "text-emerald-400" },
-                      { label: "Structure", val: analysisResult.structureScore, color: "text-amber-400" },
-                      { label: "Fillers", val: analysisResult.fillerWordsCount, color: "text-rose-400" }
-                    ].map(stat => (
-                      <div key={stat.label} className="bg-zinc-900/50 border border-zinc-800/50 p-6 rounded-3xl text-center">
-                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-2">{stat.label}</span>
-                        <div className={`text-3xl font-black ${stat.color}`}>{stat.val}{stat.label !== 'Fillers' && <span className="text-xs opacity-30">/10</span>}</div>
+                      <div className="text-2xl font-black text-indigo-400">
+                        {analysisResult.visualMetrics?.enabled 
+                          ? (analysisResult.visualMetrics.presenceScore || "—") 
+                          : (analysisResult.deliveryMetrics?.pacingScore || "—")}
+                        <span className="text-xs opacity-40 font-normal">/10</span>
                       </div>
-                    ))}
+                    </div>
                   </div>
 
-                  {/* Delivery & Acoustic Rhythm Card */}
-                  {analysisResult.deliveryMetrics && (
-                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-6 sm:p-8 space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 pb-5">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-                            <Gauge className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">
-                                Speech Delivery & Rhythm
-                              </h3>
-                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                Acoustic AI
+                  {/* ── Main Responsive Split Layout ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    
+                    {/* ── Left Column (7 cols): Primary Coaching & Model Answer ── */}
+                    <div className="lg:col-span-7 space-y-6">
+                      
+                      {/* Coaching Insight Card */}
+                      <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-5 sm:p-6 space-y-4">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-violet-400" /> Executive Coaching Insight
+                            </h3>
+                            {analysisResult.starMethodUsed !== null && (
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                                analysisResult.starMethodUsed 
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              }`}>
+                                {analysisResult.starMethodUsed ? "✓ STAR Method Identified" : "⚠ STAR Incomplete"}
                               </span>
-                            </div>
-                            <p className="text-xs text-zinc-500 mt-0.5">Cadence, speaking pace, and pause distribution.</p>
+                            )}
                           </div>
+                          <p className="text-zinc-200 leading-relaxed text-sm italic sm:text-[14.5px] font-medium bg-zinc-950/40 p-4 rounded-2xl border border-zinc-800/30">
+                            "{analysisResult.overallFeedback}"
+                          </p>
                         </div>
-                        <div className="flex items-center gap-2 self-start sm:self-auto">
-                          <span className="text-xs font-semibold text-zinc-500">Rhythm Score:</span>
-                          <span className="text-sm font-black text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-3 py-1 rounded-xl">
-                            {analysisResult.deliveryMetrics.pacingScore}<span className="text-xs opacity-50">/10</span>
-                          </span>
+
+                        {/* Strengths & Growth Areas in Clean 2-Col Grid */}
+                        <div className="grid sm:grid-cols-2 gap-3.5 pt-3 border-t border-zinc-800/50">
+                          {analysisResult.strengths && analysisResult.strengths.length > 0 && (
+                            <div className="space-y-2.5 bg-zinc-950/30 p-3.5 rounded-2xl border border-emerald-500/10">
+                              <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Strengths
+                              </h4>
+                              <ul className="space-y-1.5">
+                                {analysisResult.strengths.map((s, i) => (
+                                  <li key={i} className="text-xs text-zinc-300 flex items-start gap-2 leading-snug">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                                    <span>{s}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {analysisResult.weaknesses && analysisResult.weaknesses.length > 0 && (
+                            <div className="space-y-2.5 bg-zinc-950/30 p-3.5 rounded-2xl border border-amber-500/10">
+                              <h4 className="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                                <ShieldAlert className="w-3.5 h-3.5" /> Growth Areas
+                              </h4>
+                              <ul className="space-y-1.5">
+                                {analysisResult.weaknesses.map((w, i) => (
+                                  <li key={i} className="text-xs text-zinc-300 flex items-start gap-2 leading-snug">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1 shrink-0" />
+                                    <span>{w}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* 3 Delivery Metrics */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {/* Pace */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-                            <span>Speaking Pace</span>
-                            <Timer className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-black text-zinc-100">{analysisResult.deliveryMetrics.wpm}</span>
-                            <span className="text-xs text-zinc-500 font-semibold">WPM</span>
-                          </div>
-                          <p className="text-[11px] font-semibold text-emerald-400">
-                            {analysisResult.deliveryMetrics.pacingDesc}
-                          </p>
-                        </div>
-
-                        {/* Freezes */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-                            <span>Awkward Freezes (≥2s)</span>
-                            <PauseCircle className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-black text-zinc-100">{analysisResult.deliveryMetrics.awkwardPausesCount}</span>
-                            <span className="text-xs text-zinc-500 font-semibold">{analysisResult.deliveryMetrics.awkwardPausesCount === 1 ? 'freeze' : 'freezes'}</span>
-                          </div>
-                          <p className={`text-[11px] font-semibold ${analysisResult.deliveryMetrics.awkwardPausesCount === 0 ? 'text-zinc-400' : 'text-amber-400'}`}>
-                            {analysisResult.deliveryMetrics.awkwardPausesCount === 0
-                              ? '✓ Fluid flow, no dead air'
-                              : `Longest freeze: ${analysisResult.deliveryMetrics.longestPauseSec}s`}
-                          </p>
-                        </div>
-
-                        {/* Speech vs Silence */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <div className="flex items-center justify-between text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-                            <span>Talk vs Dead Air</span>
-                            <span className="text-zinc-500 font-bold">{analysisResult.deliveryMetrics.durationSec}s</span>
-                          </div>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-black text-zinc-100">
-                              {100 - analysisResult.deliveryMetrics.silencePercentage}%
+                      {/* Model Exemplar Response Card */}
+                      <div className="bg-gradient-to-br from-violet-600/10 via-zinc-900/40 to-transparent border border-violet-500/20 rounded-3xl p-5 sm:p-6 space-y-3.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest block">
+                              Model Exemplar Response
                             </span>
-                            <span className="text-xs text-zinc-500 font-semibold">active speaking</span>
+                            <h4 className="text-sm sm:text-base font-bold text-white">
+                              How a Principal / Executive would deliver this:
+                            </h4>
                           </div>
-                          <p className="text-[11px] font-semibold text-zinc-400">
-                            {analysisResult.deliveryMetrics.totalSilenceSec}s total silence ({analysisResult.deliveryMetrics.silencePercentage}%)
-                          </p>
+                          <button
+                            onClick={handleCopyExemplar}
+                            className="text-[11px] font-bold text-zinc-300 hover:text-white px-3 py-1.5 rounded-xl bg-zinc-800/80 border border-zinc-700/60 hover:bg-zinc-700 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                            title="Copy to clipboard"
+                          >
+                            {copiedExemplar ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span className="text-emerald-400">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
                         </div>
-                      </div>
-
-                      {/* Visual Flow Bar */}
-                      <div className="space-y-2 pt-1">
-                        <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                          <span className="text-emerald-400">Active Speaking ({100 - analysisResult.deliveryMetrics.silencePercentage}%)</span>
-                          <span className="text-zinc-400">Paused / Dead Air ({analysisResult.deliveryMetrics.silencePercentage}%)</span>
-                        </div>
-                        <div className="h-2 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
-                          <div 
-                            className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full"
-                            style={{ width: `${Math.max(5, 100 - analysisResult.deliveryMetrics.silencePercentage)}%` }}
-                          />
-                          <div 
-                            className="h-full bg-zinc-700/80"
-                            style={{ width: `${analysisResult.deliveryMetrics.silencePercentage}%` }}
-                          />
-                        </div>
-                        {analysisResult.deliveryMetrics.awkwardPauses?.length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-2">
-                            {analysisResult.deliveryMetrics.awkwardPauses.map((p, idx) => (
-                              <span key={idx} className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
-                                ⏸️ {p.durationSec}s pause at {p.timestamp}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Visual Presence & Body Language Card */}
-                  {analysisResult.visualMetrics && analysisResult.visualMetrics.enabled && (
-                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-6 sm:p-8 space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 pb-5">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                            <Eye className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">
-                                Visual Presence & Body Language
-                              </h3>
-                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                                MediaPipe Vision
-                              </span>
-                            </div>
-                            <p className="text-xs text-zinc-500 mt-0.5">Eye contact ratio, posture alignment, and non-verbal presence.</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 self-start sm:self-auto">
-                          <span className="text-xs font-semibold text-zinc-500">Presence Score:</span>
-                          <span className="text-sm font-black text-indigo-400 bg-indigo-950/60 border border-indigo-800/50 px-3 py-1 rounded-xl">
-                            {analysisResult.visualMetrics.presenceScore}<span className="text-xs opacity-50">/10</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 4 Visual Presence Metrics */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {/* Eye Contact */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Eye Contact</span>
-                          <div className="text-2xl font-black text-zinc-100">{analysisResult.visualMetrics.eyeContactPercent}%</div>
-                          <p className={`text-[11px] font-semibold ${analysisResult.visualMetrics.eyeContactPercent >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                            {analysisResult.visualMetrics.eyeContactRating}
-                          </p>
-                        </div>
-
-                        {/* Posture */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Posture</span>
-                          <div className="text-base font-bold text-zinc-200 truncate">{analysisResult.visualMetrics.posture}</div>
-                          <p className="text-[11px] font-semibold text-zinc-400">Head & neck alignment</p>
-                        </div>
-
-                        {/* Stability */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Composure</span>
-                          <div className="text-base font-bold text-zinc-200 truncate">{analysisResult.visualMetrics.headStability}</div>
-                          <p className="text-[11px] font-semibold text-zinc-400">
-                            {analysisResult.visualMetrics.fidgetAlerts === 0 ? '✓ Grounded stillness' : `${analysisResult.visualMetrics.fidgetAlerts} sudden movements`}
-                          </p>
-                        </div>
-
-                        {/* Expressiveness */}
-                        <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-1">
-                          <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest block">Expression</span>
-                          <div className="text-base font-bold text-zinc-200 truncate">{analysisResult.visualMetrics.expressiveness}</div>
-                          <p className="text-[11px] font-semibold text-zinc-400">
-                            {analysisResult.visualMetrics.smilesDetected > 0 ? `${analysisResult.visualMetrics.smilesDetected} warm smile moments` : 'Composed demeanor'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Long-Term Habit Evolution & Blind Spots Card (RAG Vector Memory) */}
-                  {analysisResult.habitTrends && (
-                    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-6 sm:p-8 space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/50 pb-5">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                            <Brain className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest">
-                                Habit Evolution & Blind Spots
-                              </h3>
-                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                RAG Memory
-                              </span>
-                            </div>
-                            <p className="text-xs text-zinc-500 mt-0.5">Semantic memory tracking habit changes, breakthroughs, and recurring blind spots.</p>
-                          </div>
-                        </div>
-                        
-                        {/* Longitudinal Trend Badge */}
-                        <div className="flex items-center gap-2 self-start sm:self-auto">
-                          <span className="text-xs font-semibold text-zinc-500">Habit Trend:</span>
-                          <span className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-xl flex items-center gap-1.5 border ${
-                            analysisResult.habitTrends.trend === 'improving'
-                              ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
-                              : analysisResult.habitTrends.trend === 'regressing'
-                              ? 'bg-rose-950/60 border-rose-500/40 text-rose-400'
-                              : analysisResult.habitTrends.trend === 'steady'
-                              ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-400'
-                              : 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                          }`}>
-                            {analysisResult.habitTrends.trend === 'improving' && <TrendingUp className="w-3.5 h-3.5" />}
-                            {analysisResult.habitTrends.trend === 'regressing' && <TrendingDown className="w-3.5 h-3.5" />}
-                            {analysisResult.habitTrends.trend === 'steady' && <Minus className="w-3.5 h-3.5" />}
-                            {analysisResult.habitTrends.trend === 'baseline' && <History className="w-3.5 h-3.5" />}
-                            {analysisResult.habitTrends.trend.toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Personal Historical Comparison Narrative */}
-                      <div className="bg-zinc-950/50 border border-zinc-800/50 p-4 rounded-2xl space-y-2">
-                        <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block">
-                          Personal Progress Assessment
-                        </span>
-                        <p className="text-sm text-zinc-300 leading-relaxed italic">
-                          "{analysisResult.habitTrends.comparisonSummary}"
+                        <p className="text-zinc-200 text-xs sm:text-sm leading-relaxed italic opacity-90 bg-zinc-950/50 p-4 rounded-2xl border border-violet-500/10">
+                          "{analysisResult.idealAnswer}"
                         </p>
                       </div>
 
-                      {/* 2 Sub-panels: Recurring Blindspots vs Milestones */}
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        {/* Recurring Blindspots */}
-                        <div className="bg-zinc-950/40 border border-zinc-800/40 p-4 rounded-2xl space-y-2">
-                          <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <ShieldAlert className="w-3.5 h-3.5" /> Recurring Blind Spots
-                          </span>
-                          {analysisResult.habitTrends.recurringHabits && analysisResult.habitTrends.recurringHabits.length > 0 ? (
-                            <ul className="space-y-1.5">
-                              {analysisResult.habitTrends.recurringHabits.map((habit, idx) => (
-                                <li key={idx} className="text-xs text-zinc-300 flex items-start gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-                                  <span>{habit}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-xs text-zinc-500 italic">No recurring speech crutches or blind spots detected.</p>
-                          )}
-                        </div>
-
-                        {/* Unlocked Milestones */}
-                        <div className="bg-zinc-950/40 border border-zinc-800/40 p-4 rounded-2xl space-y-2">
-                          <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <Award className="w-3.5 h-3.5" /> Breakthroughs & Milestones
-                          </span>
-                          {analysisResult.habitTrends.milestonesAchieved && analysisResult.habitTrends.milestonesAchieved.length > 0 ? (
-                            <ul className="space-y-1.5">
-                              {analysisResult.habitTrends.milestonesAchieved.map((ms, idx) => (
-                                <li key={idx} className="text-xs text-emerald-300 flex items-start gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                                  <span>{ms}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-xs text-zinc-500 italic">Consistently practicing builds new milestone achievements.</p>
-                          )}
-                        </div>
-                      </div>
                     </div>
-                  )}
 
-                  <div className="grid lg:grid-cols-5 gap-10">
-                    <div className="lg:col-span-3 space-y-8">
-                      <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-8 space-y-8">
-                        <div className="space-y-4">
-                          <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-violet-400" /> Coaching Insight
-                          </h3>
-                          <p className="text-zinc-300 leading-relaxed italic text-sm">"{analysisResult.overallFeedback}"</p>
-                        </div>
-                        
-                        <div className="grid sm:grid-cols-2 gap-8 pt-4 border-t border-zinc-800/50">
-                          {analysisResult.strengths && analysisResult.strengths.length > 0 && (
-                            <div className="space-y-4">
-                              <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Strengths</h4>
-                              <ul className="space-y-2">
-                                {analysisResult.strengths.map((s, i) => (
-                                  <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
-                                    <div className="w-1 h-1 rounded-full bg-emerald-500 mt-1.5 shrink-0" /> {s}
-                                  </li>
-                                ))}
-                              </ul>
+                    {/* ── Right Column (5 cols): AI Telemetry (Habit RAG + Acoustics + Body Language) ── */}
+                    <div className="lg:col-span-5 space-y-4">
+                      
+                      {/* Habit Evolution & Blind Spots Card (RAG Memory) */}
+                      {analysisResult.habitTrends && (
+                        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-4 sm:p-5 space-y-3.5">
+                          <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                                <Brain className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-black text-zinc-300 uppercase tracking-wider">
+                                  Habit Evolution
+                                </h4>
+                                <span className="text-[9px] font-bold text-zinc-500 uppercase">RAG Vector Memory</span>
+                              </div>
+                            </div>
+
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-xl flex items-center gap-1 border ${
+                              analysisResult.habitTrends.trend === 'improving'
+                                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-400'
+                                : analysisResult.habitTrends.trend === 'regressing'
+                                ? 'bg-rose-950/60 border-rose-500/40 text-rose-400'
+                                : analysisResult.habitTrends.trend === 'steady'
+                                ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-400'
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                            }`}>
+                              {analysisResult.habitTrends.trend === 'improving' && <TrendingUp className="w-3 h-3" />}
+                              {analysisResult.habitTrends.trend === 'regressing' && <TrendingDown className="w-3 h-3" />}
+                              {analysisResult.habitTrends.trend === 'steady' && <Minus className="w-3 h-3" />}
+                              {analysisResult.habitTrends.trend === 'baseline' && <History className="w-3 h-3" />}
+                              {analysisResult.habitTrends.trend.toUpperCase()}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-zinc-300 leading-relaxed italic bg-zinc-950/40 p-3 rounded-xl border border-zinc-800/30">
+                            "{analysisResult.habitTrends.comparisonSummary}"
+                          </p>
+
+                          {/* Recurring Habits / Milestones */}
+                          {(analysisResult.habitTrends.recurringHabits?.length > 0 || analysisResult.habitTrends.milestonesAchieved?.length > 0) && (
+                            <div className="grid grid-cols-1 gap-2 pt-1">
+                              {analysisResult.habitTrends.recurringHabits && analysisResult.habitTrends.recurringHabits.length > 0 && (
+                                <div className="bg-rose-950/20 border border-rose-500/20 p-2.5 rounded-xl space-y-1">
+                                  <span className="text-[9px] font-black text-rose-400 uppercase tracking-wider flex items-center gap-1">
+                                    <ShieldAlert className="w-3 h-3" /> Recurring Blind Spots
+                                  </span>
+                                  <ul className="space-y-1">
+                                    {analysisResult.habitTrends.recurringHabits.map((h, i) => (
+                                      <li key={i} className="text-[11px] text-zinc-300 flex items-start gap-1.5 leading-tight">
+                                        <span className="text-rose-400">•</span> {h}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {analysisResult.habitTrends.milestonesAchieved && analysisResult.habitTrends.milestonesAchieved.length > 0 && (
+                                <div className="bg-emerald-950/20 border border-emerald-500/20 p-2.5 rounded-xl space-y-1">
+                                  <span className="text-[9px] font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                                    <Award className="w-3 h-3" /> Milestones Unlocked
+                                  </span>
+                                  <ul className="space-y-1">
+                                    {analysisResult.habitTrends.milestonesAchieved.map((m, i) => (
+                                      <li key={i} className="text-[11px] text-emerald-300 flex items-start gap-1.5 leading-tight">
+                                        <span className="text-emerald-400">✓</span> {m}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
                             </div>
                           )}
-                          {analysisResult.weaknesses && analysisResult.weaknesses.length > 0 && (
-                            <div className="space-y-4">
-                              <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Growth Areas</h4>
-                              <ul className="space-y-2">
-                                {analysisResult.weaknesses.map((w, i) => (
-                                  <li key={i} className="text-xs text-zinc-400 flex items-start gap-2">
-                                    <div className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 shrink-0" /> {w}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    </div>
+                      )}
 
-                    <div className="lg:col-span-2 space-y-6">
-                      <div className="bg-gradient-to-br from-violet-600/10 to-transparent border border-violet-500/20 rounded-3xl p-8 space-y-6 sticky top-32">
-                        <div className="space-y-2">
-                          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest">Model Response</span>
-                          <h3 className="text-xl font-bold">You could say something like this...</h3>
+                      {/* Speech Delivery & Rhythm Card (Acoustic AI) */}
+                      {analysisResult.deliveryMetrics && (
+                        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-4 sm:p-5 space-y-3.5">
+                          <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                                <Gauge className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-black text-zinc-300 uppercase tracking-wider">
+                                  Delivery & Rhythm
+                                </h4>
+                                <span className="text-[9px] font-bold text-zinc-500 uppercase">Whisper Prosody</span>
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-black text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-2.5 py-0.5 rounded-xl">
+                              Score: {analysisResult.deliveryMetrics.pacingScore}/10
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-center">
+                            <div className="bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/40">
+                              <span className="text-[9px] font-black text-zinc-500 uppercase block">Freezes (≥2s)</span>
+                              <span className="text-base font-black text-zinc-100">{analysisResult.deliveryMetrics.awkwardPausesCount}</span>
+                              <p className="text-[10px] text-zinc-400 truncate">
+                                {analysisResult.deliveryMetrics.awkwardPausesCount === 0 ? "✓ Fluid flow" : `Longest: ${analysisResult.deliveryMetrics.longestPauseSec}s`}
+                              </p>
+                            </div>
+
+                            <div className="bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/40">
+                              <span className="text-[9px] font-black text-zinc-500 uppercase block">Talk vs Pause</span>
+                              <span className="text-base font-black text-zinc-100">
+                                {100 - analysisResult.deliveryMetrics.silencePercentage}%
+                              </span>
+                              <p className="text-[10px] text-zinc-400 truncate">
+                                {analysisResult.deliveryMetrics.silencePercentage}% dead air
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Speaking vs Silence Visual Bar */}
+                          <div className="space-y-1.5 pt-1">
+                            <div className="h-1.5 w-full bg-zinc-800/80 rounded-full overflow-hidden flex">
+                              <div 
+                                className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full"
+                                style={{ width: `${Math.max(5, 100 - analysisResult.deliveryMetrics.silencePercentage)}%` }}
+                              />
+                              <div 
+                                className="h-full bg-zinc-700/80"
+                                style={{ width: `${analysisResult.deliveryMetrics.silencePercentage}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[9px] font-semibold text-zinc-500">
+                              <span className="text-emerald-400">{100 - analysisResult.deliveryMetrics.silencePercentage}% active talk</span>
+                              <span>{analysisResult.deliveryMetrics.totalSilenceSec}s paused</span>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-zinc-200 text-sm leading-relaxed italic opacity-80">"{analysisResult.idealAnswer}"</p>
-                        <button onClick={handleReset} className="w-full py-4 rounded-2xl bg-zinc-100 text-zinc-950 font-black text-xs uppercase tracking-widest hover:bg-white transition-all cursor-pointer">
-                          Start New Session
-                        </button>
-                      </div>
+                      )}
+
+                      {/* Visual Presence Card (MediaPipe Vision - only when active) */}
+                      {analysisResult.visualMetrics && analysisResult.visualMetrics.enabled && (
+                        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-3xl p-4 sm:p-5 space-y-3.5">
+                          <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                                <Eye className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-black text-zinc-300 uppercase tracking-wider">
+                                  Visual Presence
+                                </h4>
+                                <span className="text-[9px] font-bold text-zinc-500 uppercase">MediaPipe Vision</span>
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-black text-indigo-400 bg-indigo-950/60 border border-indigo-800/50 px-2.5 py-0.5 rounded-xl">
+                              Score: {analysisResult.visualMetrics.presenceScore}/10
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-center">
+                            <div className="bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/40">
+                              <span className="text-[9px] font-black text-zinc-500 uppercase block">Eye Contact</span>
+                              <span className="text-base font-black text-zinc-100">{analysisResult.visualMetrics.eyeContactPercent}%</span>
+                              <p className={`text-[10px] font-semibold ${analysisResult.visualMetrics.eyeContactPercent >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {analysisResult.visualMetrics.eyeContactRating}
+                              </p>
+                            </div>
+
+                            <div className="bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/40">
+                              <span className="text-[9px] font-black text-zinc-500 uppercase block">Posture</span>
+                              <span className="text-xs font-bold text-zinc-200 block truncate mt-0.5">{analysisResult.visualMetrics.posture}</span>
+                              <p className="text-[10px] text-zinc-500">Alignment</p>
+                            </div>
+
+                            <div className="bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/40">
+                              <span className="text-[9px] font-black text-zinc-500 uppercase block">Composure</span>
+                              <span className="text-xs font-bold text-zinc-200 block truncate mt-0.5">{analysisResult.visualMetrics.headStability}</span>
+                              <p className="text-[10px] text-zinc-500">
+                                {analysisResult.visualMetrics.fidgetAlerts === 0 ? "✓ Stillness" : `${analysisResult.visualMetrics.fidgetAlerts} shifts`}
+                              </p>
+                            </div>
+
+                            <div className="bg-zinc-950/50 p-2 rounded-xl border border-zinc-800/40">
+                              <span className="text-[9px] font-black text-zinc-500 uppercase block">Expression</span>
+                              <span className="text-xs font-bold text-zinc-200 block truncate mt-0.5">{analysisResult.visualMetrics.expressiveness}</span>
+                              <p className="text-[10px] text-zinc-500">
+                                {analysisResult.visualMetrics.smilesDetected > 0 ? `${analysisResult.visualMetrics.smilesDetected} smiles` : "Composed"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                     </div>
+                  </div>
+
+                  {/* ── Bottom Action Bar ── */}
+                  <div className="flex items-center justify-center pt-2">
+                    <button
+                      onClick={handleReset}
+                      className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-bold text-xs uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 hover:bg-zinc-800 shadow-xl"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Start Another Challenge</span>
+                    </button>
                   </div>
                 </div>
               )}
