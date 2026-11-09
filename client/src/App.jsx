@@ -24,6 +24,7 @@ import AudioVisualizer from "./components/AudioVisualizer";
 import AudioPlayer from "./components/AudioPlayer";
 import CameraPreview from "./components/CameraPreview";
 import Skeleton, { SkeletonText } from "./components/Skeleton";
+import { API_URL } from "./lib/api";
 
 /* ── Card data ── */
 const arenaCards = [
@@ -129,7 +130,6 @@ function AppContent() {
   const [copiedExemplar, setCopiedExemplar] = useState(false);
   const isSessionActive = ["thinking", "recording", "review"].includes(phase);
 
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const { status, isRecording, audioUrl, audioBlob, stream, startRecording, stopRecording, clearAudio } = useAudioRecorder();
   const vision = useVisionPresence();
 
@@ -229,7 +229,7 @@ function AppContent() {
     let generatedTopic = null;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
       const res = await fetch(`${API_URL}/api/generate-topic`, {
         method: 'POST',
@@ -253,10 +253,12 @@ function AppContent() {
         };
       } else {
         const errorData = await res.json().catch(() => ({}));
+        console.warn("[App] Topic generation non-ok response:", res.status, errorData);
         toast.error(errorData.error || "AI Forge is busy.");
       }
     } catch (err) {
-      toast.error("Network lag detected. Using local fallback.");
+      console.warn("[App] Topic generation fetch error:", err);
+      toast.error(err.name === 'AbortError' ? "AI generation timed out. Using local fallback." : "Network lag detected. Using local fallback.");
     }
 
     setIsGeneratingTopic(false);

@@ -7,10 +7,9 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { API_URL } from "../lib/api";
 
 const UserContext = createContext(null);
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null);

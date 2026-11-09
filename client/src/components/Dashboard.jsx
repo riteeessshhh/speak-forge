@@ -20,7 +20,7 @@ import {
   Area
 } from "recharts";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../lib/api";
 
 export default function Dashboard({ onBack }) {
   const [data, setData] = useState(null);

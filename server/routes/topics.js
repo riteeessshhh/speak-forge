@@ -25,7 +25,7 @@ const router = Router();
 
 const generateLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 5,
+  max: 60, // 60 requests per minute
   message: { error: "Forge is busy. Falling back to local data." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -51,10 +51,12 @@ router.post('/', verifyToken, generateLimiter, validate(topicSchema), async (req
       countClient.release();
     }
 
-    // 2. Proactive Refill: If unseenCount is less than 3, trigger Gemini to generate 5 more
+    // 2. Proactive Background Refill: If unseenCount is less than 3, trigger background cache refill
     if (unseenCount < 3) {
-      log.info(`Low unseen topics count (${unseenCount}) for ${track}/${difficulty}. Proactively refilling cache...`);
-      await refillTopicCache(track, difficulty);
+      log.info(`Low unseen topics count (${unseenCount}) for ${track}/${difficulty}. Scheduling background cache refill...`);
+      refillTopicCache(track, difficulty).catch(err => {
+        log.warn(`[Background Cache] Proactive refill error: ${err.message}`);
+      });
     }
 
     // 3. Get topic and return (short-lived connection)
