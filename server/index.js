@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js';
 import topicRoutes from './routes/topics.js';
 import uploadRoutes from './routes/upload.js';
 import analyticsRoutes from './routes/analytics.js';
+import { initQueue } from './lib/queue.js';
 
 // Initialize environment
 // (Moved to top)
@@ -77,4 +78,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   log.info(`SpeakForge Server running on port ${PORT}`);
   log.info(`CORS allowed from: ${baseOrigin} (and / version)`);
+  initQueue();
 });

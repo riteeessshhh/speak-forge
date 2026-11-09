@@ -16,12 +16,18 @@ CREATE TABLE IF NOT EXISTS sessions (
     difficulty VARCHAR(50) NOT NULL,
     topic_text TEXT NOT NULL,
     user_id UUID NOT NULL,
+    status VARCHAR(50) DEFAULT 'completed',
+    error_message TEXT DEFAULT NULL,
+    progress_step VARCHAR(50) DEFAULT 'ready',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_sessions_user
         FOREIGN KEY(user_id)
         REFERENCES users(id)
         ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_status ON sessions(user_id, status);
 
 -- Table: recordings
 CREATE TABLE IF NOT EXISTS recordings (

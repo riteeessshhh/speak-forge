@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect } from "react";
-import { BarChart3, TrendingUp, TrendingDown, Minus, ArrowLeft, Loader2, Sparkles, Mic, History } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, Minus, ArrowLeft, Loader2, Sparkles, Mic, History, RotateCcw, AlertTriangle } from "lucide-react";
+import { toast } from "react-hot-toast";
 import Skeleton, { SkeletonText, SkeletonCircle } from "./Skeleton";
 import { 
   LineChart, 
@@ -26,22 +27,39 @@ export default function Dashboard({ onBack }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const fetchSummary = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/analytics/summary`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to fetch analytics');
+      const json = await res.json();
+      setData(json);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/analytics/summary`, {
-          credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Failed to fetch analytics');
-        const json = await res.json();
-        setData(json);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    fetchSummary();
   }, []);
+
+  const handleReanalyze = async (sessionId) => {
+    try {
+      toast.loading("Enqueuing re-analysis...", { id: "reanalyze" });
+      const res = await fetch(`${API_URL}/api/upload/reanalyze/${sessionId}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to re-analyze");
+      toast.success("Session queued for re-analysis!", { id: "reanalyze" });
+      await fetchSummary();
+    } catch (e) {
+      toast.error(e.message, { id: "reanalyze" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -385,6 +403,7 @@ export default function Dashboard({ onBack }) {
                   <tr className="bg-zinc-900/50 border-b border-zinc-800/50">
                     <th className="px-6 py-4 text-[10px] text-zinc-500 font-black uppercase tracking-widest">Session Topic</th>
                     <th className="px-4 py-4 text-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">Track</th>
+                    <th className="px-4 py-4 text-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">Status</th>
                     <th className="px-4 py-4 text-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">Clarity</th>
                     <th className="px-4 py-4 text-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">Structure</th>
                     <th className="px-4 py-4 text-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">Fillers</th>
@@ -403,6 +422,27 @@ export default function Dashboard({ onBack }) {
                         <span className="inline-flex px-2 py-0.5 rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-400 group-hover:bg-zinc-700 transition-colors">
                           {s.track_name}
                         </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        {s.status === 'failed' ? (
+                          <button
+                            onClick={() => handleReanalyze(s.session_id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-bold hover:bg-rose-500/20 transition-all cursor-pointer"
+                            title="Click to retry analysis"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Retry</span>
+                          </button>
+                        ) : s.status === 'processing' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-bold animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                            Analyzing...
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                            Ready
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/50 border border-zinc-800/50 group-hover:border-sky-500/30 transition-colors">

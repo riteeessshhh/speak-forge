@@ -140,6 +140,21 @@ function AppContent() {
   const [recordingTime, setRecordingTime] = useState(0);
   const recordingIntervalRef = useRef(null);
 
+  const [jobProgressStep, setJobProgressStep] = useState('transcribing');
+  const [activeJobSessionId, setActiveJobSessionId] = useState(null);
+  const pollTimerRef = useRef(null);
+  const phaseRef = useRef(phase);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
   const canGenerate = selectedArena !== null && selectedDifficulty !== null;
   const selectedCard = arenaCards.find((c) => c.id === selectedArena);
 
@@ -310,13 +325,80 @@ function AppContent() {
     setTimeout(() => setCopiedExemplar(false), 2000);
   };
 
+  const startJobPolling = useCallback((sessionId, topicText) => {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/upload/status/${sessionId}`, {
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (data.progressStep) {
+          setJobProgressStep(data.progressStep);
+        }
+
+        if (data.status === 'completed' && data.analysisJson) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setIsAnalyzing(false);
+          setActiveJobSessionId(null);
+
+          const fullResult = {
+            ...data.analysisJson,
+            deliveryMetrics: data.analysisJson.deliveryMetrics,
+            visualMetrics: data.analysisJson.visualMetrics,
+            habitTrends: data.analysisJson.habitTrends,
+            vocabularyUpgrades: data.analysisJson.vocabularyUpgrades,
+          };
+          setAnalysisResult(fullResult);
+
+          if (phaseRef.current === 'review') {
+            setPhase('analysis');
+            toast.success('Analysis complete!');
+          } else {
+            toast((t) => (
+              <div className="flex items-center gap-3 py-1">
+                <Sparkles className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="text-left text-xs">
+                  <p className="font-bold text-white">Analysis Ready!</p>
+                  <p className="text-zinc-400 text-[11px] truncate max-w-[180px]">{topicText || data.topic}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                    setAnalysisResult(fullResult);
+                    setPhase('analysis');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-bold text-[11px] cursor-pointer shrink-0 ml-2"
+                >
+                  View
+                </button>
+              </div>
+            ), { duration: 8000 });
+          }
+        } else if (data.status === 'failed') {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setIsAnalyzing(false);
+          setActiveJobSessionId(null);
+          toast.error(`Analysis failed: ${data.errorMessage || 'Please try again.'}`);
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 1500);
+  }, [API_URL]);
+
   const handleSubmitForAnalysis = async () => {
     if (!audioBlob) return;
     setIsAnalyzing(true);
+    setJobProgressStep('transcribing');
     try {
       const extension = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
       const formData = new FormData();
-      // Fields first, file last
       formData.append('track', currentTopic.track);
       formData.append('difficulty', currentTopic.difficulty);
       formData.append('topic', currentTopic.topic);
@@ -338,18 +420,10 @@ function AppContent() {
       }
 
       const data = await response.json();
-      setAnalysisResult({ 
-        ...data.analysis, 
-        deliveryMetrics: data.deliveryMetrics || data.analysis?.deliveryMetrics,
-        visualMetrics: data.visualMetrics || data.analysis?.visualMetrics,
-        habitTrends: data.habitTrends || data.analysis?.habitTrends,
-        councilReports: data.analysis?.councilReports,
-      });
-      setPhase("analysis");
-      toast.success("Analysis complete!");
+      setActiveJobSessionId(data.sessionId);
+      startJobPolling(data.sessionId, currentTopic.topic);
     } catch (err) {
       toast.error(err.message);
-    } finally {
       setIsAnalyzing(false);
     }
   };
@@ -660,9 +734,9 @@ function AppContent() {
                     
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                       {isAnalyzing ? (
-                        <div className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-white/50 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 animate-pulse cursor-not-allowed">
+                        <div className="w-full h-14 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 animate-pulse cursor-not-allowed">
                           <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
-                          <span>{loadingTexts[loadingTextIndex]}</span>
+                          <span>Processing in Background Queue...</span>
                         </div>
                       ) : (
                         <>
@@ -684,11 +758,78 @@ function AppContent() {
                   </div>
 
                   {isAnalyzing && (
-                    <div className="w-full space-y-6 animate-pulse">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
+                    <div className="w-full bg-zinc-900/60 border border-violet-500/20 rounded-3xl p-6 sm:p-8 space-y-6 animate-fade-in-up">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <Bot className="w-3.5 h-3.5" /> BullMQ / Redis Queue Active
+                          </span>
+                          <h3 className="text-base sm:text-lg font-bold text-white">Analyzing Your Speech</h3>
+                          <p className="text-xs text-zinc-400">Audio uploaded. You can wait here or practice your next prompt immediately.</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setPhase("selection");
+                            clearAudio();
+                            setSelectedArena(null);
+                            setSelectedDifficulty(null);
+                            toast("Analysis running in background. You will be notified when ready!", { icon: "🔔" });
+                          }}
+                          className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold transition-all cursor-pointer border border-zinc-700/60 flex items-center justify-center gap-2 shrink-0 shadow-lg"
+                        >
+                          <span>Practice Next Prompt</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      <Skeleton className="h-64 w-full" />
+
+                      {/* 3-Step Live Progress Stepper */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Step 1 */}
+                        <div className={`p-4 rounded-2xl border transition-all ${
+                          jobProgressStep === 'transcribing'
+                            ? 'bg-violet-500/10 border-violet-500/40 text-violet-300'
+                            : 'bg-zinc-950/40 border-zinc-800 text-zinc-400'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className={`w-2 h-2 rounded-full ${jobProgressStep === 'transcribing' ? 'bg-violet-400 animate-ping' : 'bg-emerald-400'}`} />
+                            <span className="text-[10px] font-black uppercase tracking-wider">Step 1</span>
+                          </div>
+                          <p className="text-xs font-bold text-white">Acoustic Transcription</p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5">Whisper Cadence & Freezes</p>
+                        </div>
+
+                        {/* Step 2 */}
+                        <div className={`p-4 rounded-2xl border transition-all ${
+                          jobProgressStep === 'evaluating'
+                            ? 'bg-violet-500/10 border-violet-500/40 text-violet-300'
+                            : (jobProgressStep === 'storing' || jobProgressStep === 'ready')
+                            ? 'bg-zinc-950/40 border-zinc-800 text-zinc-400'
+                            : 'bg-zinc-950/20 border-zinc-900 text-zinc-600'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className={`w-2 h-2 rounded-full ${jobProgressStep === 'evaluating' ? 'bg-violet-400 animate-ping' : (jobProgressStep === 'storing' || jobProgressStep === 'ready') ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
+                            <span className="text-[10px] font-black uppercase tracking-wider">Step 2</span>
+                          </div>
+                          <p className="text-xs font-bold text-white">Multi-Agent Council</p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5">Content, Delivery & Memory</p>
+                        </div>
+
+                        {/* Step 3 */}
+                        <div className={`p-4 rounded-2xl border transition-all ${
+                          jobProgressStep === 'storing'
+                            ? 'bg-violet-500/10 border-violet-500/40 text-violet-300'
+                            : jobProgressStep === 'ready'
+                            ? 'bg-zinc-950/40 border-zinc-800 text-zinc-400'
+                            : 'bg-zinc-950/20 border-zinc-900 text-zinc-600'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className={`w-2 h-2 rounded-full ${jobProgressStep === 'storing' ? 'bg-violet-400 animate-ping' : jobProgressStep === 'ready' ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
+                            <span className="text-[10px] font-black uppercase tracking-wider">Step 3</span>
+                          </div>
+                          <p className="text-xs font-bold text-white">Synthesizing & Memory</p>
+                          <p className="text-[11px] text-zinc-500 mt-0.5">RAG Vector & Exemplar</p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

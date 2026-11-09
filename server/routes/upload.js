@@ -1,27 +1,32 @@
 /**
- * routes/upload.js — Upload & Analysis Route (Transaction-Optimized)
+ * routes/upload.js — Upload & Analysis Route (Async Queue-Driven Architecture)
  * 
- * PHASE 1: External AI calls (Supabase, Groq, Gemini) — NO DB connection held
- * PHASE 2: SQL transaction (session, recording, analytics) — DB held ~50ms
+ * 1. POST /api/upload: Uploads audio to Supabase Storage, creates session record, 
+ *    dispatches job to BullMQ / Queue, and returns HTTP 202 Accepted immediately (<300ms).
+ * 2. GET /api/upload/status/:sessionId: Polls real-time job progress ('transcribing' -> 'evaluating' -> 'storing' -> 'ready').
+ * 3. POST /api/upload/reanalyze/:sessionId: Re-enqueues failed or past sessions for re-analysis.
  */
 
 import { Router } from 'express';
 import multer from 'multer';
-import Groq, { toFile } from 'groq-sdk';
 import { log } from '../lib/logger.js';
 import pool from '../db/pool.js';
 import supabase from '../lib/supabase.js';
 import { verifyToken } from '../middleware/auth.js';
-import { analyzeTranscript } from '../lib/analysis.js';
-import { calculateDeliveryMetrics } from '../lib/deliveryMetrics.js';
-import { retrieveUserSessionMemories, storeSessionMemory } from '../lib/ragMemory.js';
-import { insertSession, insertRecording, insertAnalytics } from '../db/queries.js';
+import { addAnalysisJob, getInMemoryJobStatus } from '../lib/queue.js';
+import { 
+  insertSession, 
+  getSessionWithAnalysis, 
+  updateSessionStatus 
+} from '../db/queries.js';
 
 const router = Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+/**
+ * Enqueue a new audio session for background processing.
+ */
 router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
   const { track, difficulty, topic, isBehavioral, visualMetrics: rawVisualMetrics } = req.body;
   const userId = req.user.id;
@@ -40,149 +45,170 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
   if (!audioFile) {
     return res.status(400).json({ error: 'No audio file provided' });
   }
-  log.info(`Received audio: ${audioFile.originalname} | Size: ${audioFile.size} bytes | Type: ${audioFile.mimetype}`);
 
   if (!track || !difficulty || !topic) {
     return res.status(400).json({ error: 'Track, difficulty, and topic are required.' });
   }
 
-  try {
-    /* ═══════════════════════════════════════════════
-       PHASE 1: EXTERNAL AI CALLS (No DB connection)
-       ═══════════════════════════════════════════════ */
+  log.info(`Received audio: ${audioFile.originalname} | Size: ${audioFile.size} bytes for user ${userId}`);
 
-    // ─── 1 & 2. CONCURRENT: SUPABASE STORAGE UPLOAD & GROQ WHISPER STT ───
+  try {
+    // 1. Upload audio to Supabase Storage immediately (~150-200ms)
     const tempId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const fileName = `${tempId}.webm`;
 
-    log.info(`[Pipeline] Running Supabase upload and Groq Whisper STT concurrently...`);
-
-    const uploadToSupabase = async () => {
-      const { error } = await supabase.storage
-        .from('recordings')
-        .upload(fileName, audioFile.buffer, {
-          contentType: audioFile.mimetype || 'audio/webm',
-        });
-
-      if (error) {
-        throw new Error(`Supabase upload failed: ${error.message}`);
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(fileName);
-      return publicUrlData.publicUrl;
-    };
-
-    const transcribeWithGroq = async () => {
-      const transcription = await groq.audio.transcriptions.create({
-        file: await toFile(audioFile.buffer, fileName),
-        model: "whisper-large-v3",
-        response_format: "verbose_json",
+    const { error: uploadErr } = await supabase.storage
+      .from('recordings')
+      .upload(fileName, audioFile.buffer, {
+        contentType: audioFile.mimetype || 'audio/webm',
       });
-      return transcription;
-    };
 
-    const retrievePastMemories = async () => {
-      try {
-        return await retrieveUserSessionMemories(pool, userId, `${track}: ${topic}`);
-      } catch (e) {
-        log.warn("[RAG] Past memory retrieval skipped:", e.message);
-        return [];
-      }
-    };
+    if (uploadErr) {
+      throw new Error(`Supabase upload failed: ${uploadErr.message}`);
+    }
 
-    const [s3Url, transcriptionData, pastMemories] = await Promise.all([
-      uploadToSupabase(),
-      transcribeWithGroq(),
-      retrievePastMemories(),
-    ]);
+    const { data: publicUrlData } = supabase.storage
+      .from('recordings')
+      .getPublicUrl(fileName);
+    const s3Url = publicUrlData.publicUrl;
 
-    const transcriptText = (transcriptionData?.text || '').trim();
-    const deliveryMetrics = calculateDeliveryMetrics(transcriptionData);
-
-    log.info(`Audio uploaded to Supabase: ${fileName}`);
-    log.info(`Transcription complete: ${transcriptText.length} chars | Pace: ${deliveryMetrics.wpm} WPM (${deliveryMetrics.pacing}) | Pauses: ${deliveryMetrics.awkwardPausesCount}`);
-    log.info(`[RAG] Retrieved ${pastMemories.length} historical performance memories for habit comparison.`);
-
-    // ─── 3. PRE-FILTER & FALLBACK FILLER COUNT ───
-    const explicitFillerRegex = /\b(u[hm]+|uh|er|you know|I mean)\b/gi;
-    const fallbackFillerCount = (transcriptText.match(explicitFillerRegex) || []).length;
-
-    // ─── 4. GEMINI LLM ANALYSIS (The 'Brutal Truth' Layer with RAG Memory) ───
-    const { analysisJson } = await analyzeTranscript({
-      topic,
-      track,
-      transcriptText,
-      isBehavioral: isBehavioralBool,
-      deliveryMetrics,
-      visualMetrics,
-      memories: pastMemories,
-      fallbackFillerCount,
-    });
-    const finalFillerCount = analysisJson.fillerWordsCount;
-
-    /* ═══════════════════════════════════════════════
-       PHASE 2: SQL TRANSACTION (~50ms DB hold time)
-       ═══════════════════════════════════════════════ */
-
+    // 2. Insert session with initial status 'processing' and progressStep 'transcribing'
     const client = await pool.connect();
+    let sessionId;
     try {
-      await client.query('BEGIN');
-
-      const sessionId = await insertSession(client, track, difficulty, topic, userId);
-      await insertRecording(client, sessionId, s3Url, transcriptText, analysisJson);
-      await insertAnalytics(
-        client, sessionId, userId, finalFillerCount,
-        analysisJson.confidenceScore || null,
-        analysisJson.clarityScore || null,
-        analysisJson.structureScore || null
-      );
-
-      await client.query('COMMIT');
-      log.info(`Session ${sessionId} committed successfully.`);
-
-      // Asynchronously store this session into the user's vector memory bank
-      storeSessionMemory(pool, {
-        sessionId,
-        userId,
-        trackName: track,
-        topicText: topic,
-        transcriptSummary: analysisJson.overallFeedback || '',
-        strengths: analysisJson.strengths || [],
-        weaknesses: analysisJson.weaknesses || [],
-        fillerWordCount: finalFillerCount,
-        wpm: deliveryMetrics?.wpm,
-        awkwardPauses: deliveryMetrics?.awkwardPausesCount,
-        eyeContactPercent: visualMetrics?.eyeContactPercent,
-        presenceScore: visualMetrics?.presenceScore,
-        confidenceScore: analysisJson.confidenceScore,
-        clarityScore: analysisJson.clarityScore,
-        structureScore: analysisJson.structureScore,
-      }).catch(err => log.error("[RAG] Background memory save failed:", err.message));
-
-      res.json({
-        success: true,
-        sessionId,
-        transcript: transcriptText,
-        analysis: analysisJson,
-        deliveryMetrics,
-        visualMetrics,
-        habitTrends: analysisJson.habitTrends,
-        pastMemoriesCount: pastMemories.length,
-        audioUrl: s3Url,
-      });
-    } catch (dbError) {
-      await client.query('ROLLBACK');
-      log.error("DB transaction failed:", dbError.message);
-      throw dbError;
+      sessionId = await insertSession(client, track, difficulty, topic, userId, 'processing', 'transcribing');
     } finally {
       client.release();
     }
 
+    // 3. Dispatch to BullMQ / In-Process Queue
+    const jobInfo = await addAnalysisJob({
+      sessionId,
+      userId,
+      track,
+      difficulty,
+      topic,
+      isBehavioral: isBehavioralBool,
+      visualMetrics,
+      s3Url,
+      fileName,
+      audioBuffer: audioFile.buffer,
+    });
+
+    log.info(`[Queue] Session ${sessionId} enqueued successfully (Job: ${jobInfo.jobId})`);
+
+    // 4. Return HTTP 202 Accepted immediately (<300ms)
+    return res.status(202).json({
+      status: 'processing',
+      progressStep: 'transcribing',
+      sessionId,
+      jobId: jobInfo.jobId,
+      s3Url,
+      message: 'Audio received and enqueued for analysis.'
+    });
+
   } catch (error) {
-    log.error("Upload pipeline failed:", error.message);
+    log.error('Upload route error:', error.message);
     res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+/**
+ * Poll job status and fetch analysis result when complete.
+ */
+router.get('/status/:sessionId', verifyToken, async (req, res) => {
+  const { sessionId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const client = await pool.connect();
+    let sessionData;
+    try {
+      sessionData = await getSessionWithAnalysis(client, sessionId, userId);
+    } finally {
+      client.release();
+    }
+
+    if (!sessionData) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Check fast in-memory tracker if available
+    const memJob = getInMemoryJobStatus(sessionId);
+    const progressStep = memJob?.progressStep || sessionData.progress_step || 'ready';
+
+    return res.json({
+      status: sessionData.status,
+      progressStep,
+      sessionId: sessionData.session_id,
+      track: sessionData.track_name,
+      difficulty: sessionData.difficulty,
+      topic: sessionData.topic_text,
+      s3Url: sessionData.s3_url,
+      transcriptText: sessionData.transcript,
+      analysisJson: sessionData.analysis_json,
+      errorMessage: sessionData.error_message,
+      createdAt: sessionData.created_at,
+    });
+  } catch (err) {
+    log.error(`Failed to fetch status for session ${sessionId}:`, err.message);
+    res.status(500).json({ error: 'Failed to fetch session status' });
+  }
+});
+
+/**
+ * Re-analyze a failed or past session.
+ */
+router.post('/reanalyze/:sessionId', verifyToken, async (req, res) => {
+  const { sessionId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const client = await pool.connect();
+    let sessionData;
+    try {
+      sessionData = await getSessionWithAnalysis(client, sessionId, userId);
+    } finally {
+      client.release();
+    }
+
+    if (!sessionData) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (!sessionData.s3_url) {
+      return res.status(400).json({ error: 'No audio recording found for this session to re-analyze' });
+    }
+
+    // Mark session as processing
+    const client2 = await pool.connect();
+    try {
+      await updateSessionStatus(client2, sessionId, 'processing', 'transcribing', null);
+    } finally {
+      client2.release();
+    }
+
+    const jobInfo = await addAnalysisJob({
+      sessionId,
+      userId,
+      track: sessionData.track_name,
+      difficulty: sessionData.difficulty,
+      topic: sessionData.topic_text,
+      isBehavioral: false,
+      s3Url: sessionData.s3_url,
+      fileName: `${sessionId}.webm`,
+    });
+
+    return res.status(202).json({
+      status: 'processing',
+      progressStep: 'transcribing',
+      sessionId,
+      jobId: jobInfo.jobId,
+      message: 'Session enqueued for re-analysis.'
+    });
+  } catch (err) {
+    log.error(`Failed to reanalyze session ${sessionId}:`, err.message);
+    res.status(500).json({ error: 'Failed to reanalyze session' });
   }
 });
 
