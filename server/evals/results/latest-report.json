@@ -1,17 +1,17 @@
 {
-  "timestamp": "2026-11-07T15:07:08.516Z",
+  "timestamp": "2026-11-09T15:50:04.252Z",
   "total": 8,
-  "passed": 8,
-  "failed": 0,
-  "passRate": 100,
+  "passed": 7,
+  "failed": 1,
+  "passRate": 88,
   "schemaConformanceRate": 100,
-  "averageLatencyMs": 4644,
+  "averageLatencyMs": 3899,
   "results": [
     {
       "id": "tc_01_star_method_high_performer",
       "name": "STAR Behavioral High Performer",
       "passed": true,
-      "latencyMs": 4918,
+      "latencyMs": 5889,
       "usedModel": "multi-agent-council",
       "scores": {
         "confidence": 8,
@@ -27,13 +27,13 @@
       "id": "tc_02_rambling_heavy_filler",
       "name": "Rambling Answer with Heavy Fillers",
       "passed": true,
-      "latencyMs": 8414,
+      "latencyMs": 4877,
       "usedModel": "multi-agent-council",
       "scores": {
         "confidence": 4,
-        "clarity": 6,
+        "clarity": 5,
         "structure": 5,
-        "fillers": 6,
+        "fillers": 7,
         "starMethodUsed": null
       },
       "failures": [],
@@ -43,10 +43,10 @@
       "id": "tc_03_filler_context_disambiguation",
       "name": "Grammatical 'like' vs Filler Crutch",
       "passed": true,
-      "latencyMs": 6531,
+      "latencyMs": 4110,
       "usedModel": "multi-agent-council",
       "scores": {
-        "confidence": 5,
+        "confidence": 6,
         "clarity": 7,
         "structure": 7,
         "fillers": 0,
@@ -91,7 +91,7 @@
       "id": "tc_06_senior_system_design",
       "name": "Senior Architecture & Technical Depth",
       "passed": true,
-      "latencyMs": 4642,
+      "latencyMs": 5369,
       "usedModel": "multi-agent-council",
       "scores": {
         "confidence": 8,
@@ -107,7 +107,7 @@
       "id": "tc_07_vague_junior_answer",
       "name": "Vague Junior Answer (Lacks Depth)",
       "passed": true,
-      "latencyMs": 4447,
+      "latencyMs": 4466,
       "usedModel": "multi-agent-council",
       "scores": {
         "confidence": 5,
@@ -122,17 +122,19 @@
     {
       "id": "tc_08_startup_pitch",
       "name": "Startup Pitch Track (Hook, Value Prop & CTA)",
-      "passed": true,
-      "latencyMs": 8196,
+      "passed": false,
+      "latencyMs": 6479,
       "usedModel": "multi-agent-council",
       "scores": {
-        "confidence": 8,
+        "confidence": 7,
         "clarity": 8,
         "structure": 8,
         "fillers": 0,
         "starMethodUsed": null
       },
-      "failures": [],
+      "failures": [
+        "confidenceScore expected >= 8, got 7"
+      ],
       "judgeResult": null
     }
   ]
