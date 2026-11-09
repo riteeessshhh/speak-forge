@@ -49,6 +49,12 @@ export const habitTrendsSchema = z.object({
   milestonesAchieved: z.array(z.string()).default([]),
 }).optional().nullable();
 
+export const vocabularyUpgradeSchema = z.object({
+  original: z.string(),
+  better: z.string(),
+  reason: z.string(),
+});
+
 export const analysisResultSchema = z.object({
   confidenceScore: z.number().min(0).max(10),
   clarityScore: z.number().min(0).max(10),
@@ -60,6 +66,7 @@ export const analysisResultSchema = z.object({
   overallFeedback: z.string(),
   idealAnswer: z.string(),
   starMethodUsed: z.boolean().nullable(),
+  vocabularyUpgrades: z.array(vocabularyUpgradeSchema).optional().default([]),
   deliveryMetrics: deliveryMetricsSchema,
   visualMetrics: visualMetricsSchema,
   habitTrends: habitTrendsSchema,
@@ -91,6 +98,24 @@ export function getTrackEvaluationInstructions(track = '', isBehavioral = false)
   * Assess conceptual accuracy, depth of understanding, and underlying architectural mechanics.
   * Evaluate trade-offs (e.g. latency vs consistency, memory vs CPU, scalability bottlenecks, failure modes).
   * Penalize answers that state high-level buzzwords without explaining how the mechanism works.`;
+  }
+
+  if (t.includes('story') || t.includes('social')) {
+    return `TRACK FOCUS: Storytelling & Social Flow
+- STAR METHOD: Set "starMethodUsed" to null.
+- NARRATIVE EVALUATION:
+  * Assess the Narrative Arc: Hook (did opening grab attention?), Context (setting the scene), Conflict/Tension (the obstacle, surprise, or awkwardness), and Resolution/Takeaway.
+  * Evaluate emotional resonance, conversational warmth, and sensory vividness.
+  * Penalize overly sterile, textbook corporate phrasing. Reward authentic human connection and humor.`;
+  }
+
+  if (t.includes('drill') || t.includes('blank') || t.includes('spontaneous')) {
+    return `TRACK FOCUS: Never-Go-Blank Spontaneous Association Drill
+- STAR METHOD: Set "starMethodUsed" to null.
+- SPONTANEOUS DRILL EVALUATION:
+  * Assess spontaneous mental fluency: Did the speaker speak continuously without freezing or over-filtering their thoughts?
+  * Assess creative association: Did they connect the everyday object or prompt to a personal observation, human psychology, or metaphor?
+  * Reward smooth verbal flow, confidence, and agility over rigid factual structure.`;
   }
 
   if (t.includes('pitch') || t.includes('creative')) {
@@ -216,6 +241,11 @@ STRICT EVALUATION RULES:
    - If the candidate's answer was good: Refine and elevate their core points, sharpen their vocabulary, and structure it into an executive-level response.
    - If the candidate's answer was weak, brief, or incorrect: Provide a complete, comprehensive, and accurate model answer demonstrating the ideal depth, terminology, and structure. Do NOT merely paraphrase a flawed or brief answer.
 
+6. VOCABULARY & ARTICULATION POLISH (vocabularyUpgrades):
+   - Extract 2-3 words or phrases from the candidate's transcript that were bland, repetitive, basic, or informal.
+   - For each, provide a refined, articulate English alternative ("better") and a concise coaching tip ("reason") explaining how it elevates their articulation.
+   - If the transcript is under 10 words or invalid, return an empty array [].
+
 JSON Structure ONLY:
 {
   "confidenceScore": number,
@@ -228,6 +258,13 @@ JSON Structure ONLY:
   "overallFeedback": "string",
   "idealAnswer": "string",
   "starMethodUsed": boolean|null,
+  "vocabularyUpgrades": [
+    {
+      "original": "string",
+      "better": "string",
+      "reason": "string"
+    }
+  ],
   "habitTrends": {
     "trend": "improving"|"steady"|"regressing"|"baseline",
     "comparisonSummary": "string",
@@ -274,6 +311,19 @@ export function parseAnalysisResponse(analysisText, fallbackFillerCount = 0) {
     : fallbackFillerCount;
 
   analysisJson.fillerWordsCount = finalFillerCount;
+
+  // Ensure vocabularyUpgrades is valid
+  if (!Array.isArray(analysisJson.vocabularyUpgrades)) {
+    analysisJson.vocabularyUpgrades = [];
+  } else {
+    analysisJson.vocabularyUpgrades = analysisJson.vocabularyUpgrades
+      .filter(item => item && typeof item === 'object' && item.original && item.better)
+      .map(item => ({
+        original: String(item.original).trim(),
+        better: String(item.better).trim(),
+        reason: String(item.reason || "Refines phrasing and improves articulation.").trim()
+      }));
+  }
 
   // Ensure habitTrends is valid
   if (!analysisJson.habitTrends || typeof analysisJson.habitTrends !== 'object') {

@@ -37,6 +37,10 @@ CRITICAL RULES:
 2. STAR METHOD:
    - If behavioral: verify Situation, Task, Action, Result. Set starMethodUsed to true ONLY if all 4 are present. Otherwise false.
    - If non-behavioral: set starMethodUsed to null.
+3. VOCABULARY AUDIT:
+   - Identify 2-3 words or phrases in candidate's transcript that were bland, repetitive, basic, or informal.
+   - Propose articulate English upgrades with a brief coaching reason.
+   - If transcript is under 10 words, return [].
 
 Output JSON ONLY:
 {
@@ -46,7 +50,14 @@ Output JSON ONLY:
   "answerLogic": "string",
   "contentStrengths": ["string"],
   "contentWeaknesses": ["string"],
-  "technicalDepthSummary": "string"
+  "technicalDepthSummary": "string",
+  "vocabularyUpgrades": [
+    {
+      "original": "string",
+      "better": "string",
+      "reason": "string"
+    }
+  ]
 }`;
 
   try {
@@ -65,7 +76,8 @@ Output JSON ONLY:
     answerLogic: "Logic was partially identifiable.",
     contentStrengths: ["Addressed the core subject"],
     contentWeaknesses: ["Lacked deeper trade-off analysis"],
-    technicalDepthSummary: "Standard high-level response."
+    technicalDepthSummary: "Standard high-level response.",
+    vocabularyUpgrades: []
   };
 }
 
@@ -107,7 +119,7 @@ CRITICAL RULES:
    - NEVER count "like" when used as a comparison ("tools like X", "act like Y") or as a verb ("I like Z"). If there are NO actual hesitation crutches, fillerWordsCount MUST be 0.
 2. CONFIDENCE SCORE (INTEGER 0-10 ONLY):
    - Whole integers only.
-   - Reward steady cadence (130-165 WPM), strong eye contact (≥75%), and minimal hesitation crutches.
+   - Reward steady cadence (130-165 WPM), strong eye contact (≥75%), clear conviction, and minimal hesitation crutches. Compelling pitches with strong rhetoric and zero hesitation deserve 8-9.
    - If the candidate's answer is brief (under 30 words) or superficial, cap confidence at 5-6.
    - Penalize rushed pace (>175 WPM), dead air freezes, and frequent lookaways.
 
@@ -228,6 +240,9 @@ SPECIALIST COUNCIL REPORTS:
 - Recurring Habits: ${JSON.stringify(memoryReport.recurringHabits)}
 - Milestones Unlocked: ${JSON.stringify(memoryReport.milestonesAchieved)}
 
+4. Vocabulary Candidates from Content Specialist:
+${JSON.stringify(contentReport.vocabularyUpgrades || [])}
+
 YOUR OBJECTIVE AS LEAD COACH:
 1. Synthesize the findings into a cohesive, executive-grade evaluation.
 2. SCORE CALIBRATION RULES (INTEGER 0-10 ONLY):
@@ -242,6 +257,10 @@ YOUR OBJECTIVE AS LEAD COACH:
    - Highlight content depth, delivery presence, and habit evolution in one fluent, motivating coaching narrative.
 5. Write "idealAnswer" (80–140 words):
    - A gold-standard exemplar response that would secure a unanimous "Strong Hire" decision from a senior hiring committee.
+6. Curate "vocabularyUpgrades" (2-3 items):
+   - Select 2-3 specific words or phrases from the candidate's transcript that were bland, basic, or repetitive.
+   - Provide articulate English alternatives ("better") and an educational coaching reason ("reason").
+   - If transcript is under 10 words or invalid, return [].
 
 Output JSON ONLY:
 {
@@ -255,6 +274,13 @@ Output JSON ONLY:
   "overallFeedback": "string",
   "idealAnswer": "string",
   "starMethodUsed": boolean|null,
+  "vocabularyUpgrades": [
+    {
+      "original": "string",
+      "better": "string",
+      "reason": "string"
+    }
+  ],
   "habitTrends": {
     "trend": "improving"|"steady"|"regressing"|"baseline",
     "comparisonSummary": "string",
@@ -294,6 +320,19 @@ Output JSON ONLY:
     result.habitTrends = memoryReport;
   }
 
+  // Normalize vocabularyUpgrades
+  if (!Array.isArray(result.vocabularyUpgrades)) {
+    result.vocabularyUpgrades = Array.isArray(contentReport.vocabularyUpgrades) ? contentReport.vocabularyUpgrades : [];
+  } else {
+    result.vocabularyUpgrades = result.vocabularyUpgrades
+      .filter(item => item && typeof item === 'object' && item.original && item.better)
+      .map(item => ({
+        original: String(item.original).trim(),
+        better: String(item.better).trim(),
+        reason: String(item.reason || "Refines phrasing and improves articulation.").trim()
+      }));
+  }
+
   // Attach delivery & visual telemetry
   if (deliveryMetrics) result.deliveryMetrics = deliveryMetrics;
   if (visualMetrics) result.visualMetrics = visualMetrics;
@@ -329,6 +368,7 @@ export async function executeMultiAgentCouncil({
       overallFeedback: "SpeakForge couldn't hear you clearly. Please ensure your microphone is working and you are answering the prompt.",
       idealAnswer: "In a real interview, clearly state your thesis in the first sentence, outline your framework or main factors, and conclude with the concrete outcome.",
       starMethodUsed: null,
+      vocabularyUpgrades: [],
       deliveryMetrics,
       visualMetrics,
       habitTrends: {
@@ -354,6 +394,7 @@ export async function executeMultiAgentCouncil({
       overallFeedback: "The input provided is irrelevant to the topic. Please stay on track.",
       idealAnswer: "Provide a direct, substantive answer that addresses the core prompt without digressing into unrelated topics.",
       starMethodUsed: null,
+      vocabularyUpgrades: [],
       deliveryMetrics,
       visualMetrics,
       habitTrends: {

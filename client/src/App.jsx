@@ -29,50 +29,40 @@ import Skeleton, { SkeletonText } from "./components/Skeleton";
 const arenaCards = [
   {
     id: "interview",
-    trackName: "Interview Prep",
+    trackName: "HR & Behavioral",
     icon: Building2,
-    title: "Interview Prep",
-    description: "Behavioral & HR questions from easy icebreakers to tough conflict scenarios.",
+    title: "HR & Behavioral",
+    description: "HR screening, STAR behavioral scenarios, workplace conflict, and leadership questions.",
     color: "bg-emerald-500",
     shadowColor: "shadow-emerald-500/10",
     ringColor: "ring-emerald-500/50",
   },
   {
     id: "tech",
-    trackName: "Tech & CS",
+    trackName: "Core Tech & CS",
     icon: Cpu,
-    title: "Tech & CS",
-    description: "Data structures, algorithms, systems design, and networking fundamentals.",
-    color: "bg-pink-500",
-    shadowColor: "shadow-pink-500/10",
-    ringColor: "ring-pink-500/50",
+    title: "Core Tech & CS",
+    description: "OOP, DBMS, OS, Computer Networks, DSA concepts, and Fresher System Design.",
+    color: "bg-blue-500",
+    shadowColor: "shadow-blue-500/10",
+    ringColor: "ring-blue-500/50",
   },
   {
-    id: "hottakes",
-    trackName: "Hot Takes",
+    id: "storytelling",
+    trackName: "Storytelling & Social",
+    icon: Sparkles,
+    title: "Storytelling & Social",
+    description: "Master captivating storytelling, small talk, social charisma, and conversational hooks.",
+    color: "bg-amber-500",
+    shadowColor: "shadow-amber-500/10",
+    ringColor: "ring-amber-500/50",
+  },
+  {
+    id: "drill",
+    trackName: "Never-Go-Blank Drill",
     icon: Flame,
-    title: "Hot Takes",
-    description: "Defend the indefensible. Practice thinking on your feet under pressure.",
-    color: "bg-rose-500",
-    shadowColor: "shadow-rose-500/10",
-    ringColor: "ring-rose-500/50",
-  },
-  {
-    id: "pitch",
-    trackName: "Creative Pitch",
-    icon: Rocket,
-    title: "Creative Pitch",
-    description: "Sell an idea, a product, or yourself to investors in 60 seconds flat.",
-    color: "bg-orange-500",
-    shadowColor: "shadow-orange-500/10",
-    ringColor: "ring-orange-500/50",
-  },
-  {
-    id: "random",
-    trackName: "True Random",
-    icon: Shuffle,
-    title: "True Random",
-    description: "Bizarre, philosophical, and everyday impromptu questions. Expect chaos.",
+    title: "Never-Go-Blank Drill",
+    description: "60-second spontaneous association drills on everyday concepts to eliminate freezing.",
     color: "bg-violet-500",
     shadowColor: "shadow-violet-500/10",
     ringColor: "ring-violet-500/50",
@@ -890,6 +880,52 @@ function AppContent() {
                         </p>
                       </div>
 
+                      {/* Vocabulary & Articulation Polish Card */}
+                      {analysisResult.vocabularyUpgrades && analysisResult.vocabularyUpgrades.length > 0 && (
+                        <div className="bg-gradient-to-br from-emerald-600/10 via-zinc-900/40 to-transparent border border-emerald-500/20 rounded-3xl p-5 sm:p-6 space-y-3.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                <Sparkles className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest block">
+                                  Articulation Polish
+                                </span>
+                                <h4 className="text-sm sm:text-base font-bold text-white">
+                                  Vocabulary & Phrasing Upgrades
+                                </h4>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider bg-zinc-800/80 border border-zinc-700/50 px-2.5 py-1 rounded-lg">
+                              {analysisResult.vocabularyUpgrades.length} Upgrades
+                            </span>
+                          </div>
+
+                          <div className="space-y-3 pt-1">
+                            {analysisResult.vocabularyUpgrades.map((item, idx) => (
+                              <div 
+                                key={idx}
+                                className="p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/80 hover:border-emerald-500/30 transition-all space-y-1.5"
+                              >
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  <span className="line-through text-zinc-500 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800">
+                                    "{item.original}"
+                                  </span>
+                                  <span className="text-zinc-600 font-bold">→</span>
+                                  <span className="text-emerald-400 font-bold px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_12px_rgba(52,211,153,0.15)]">
+                                    "{item.better}"
+                                  </span>
+                                </div>
+                                <p className="text-[11px] sm:text-xs text-zinc-400 leading-relaxed pl-0.5">
+                                  {item.reason}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                     </div>
 
                     {/* ── Right Column (5 cols): AI Telemetry (Habit RAG + Acoustics + Body Language) ── */}
@@ -1112,10 +1148,12 @@ function ArenaCard({ icon: Icon, title, description, color, shadowColor, ringCol
   // Sharp 'Electrified' Selection Styles
   const selectionStyles = {
     'bg-emerald-500': 'border-emerald-500/50 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20 bg-emerald-500/5',
+    'bg-blue-500': 'border-blue-500/50 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20 bg-blue-500/5',
+    'bg-amber-500': 'border-amber-500/50 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/20 bg-amber-500/5',
+    'bg-violet-500': 'border-violet-500/50 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20 bg-violet-500/5',
     'bg-pink-500': 'border-pink-500/50 ring-2 ring-pink-500/50 shadow-lg shadow-pink-500/20 bg-pink-500/5',
     'bg-rose-500': 'border-rose-500/50 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/20 bg-rose-500/5',
     'bg-orange-500': 'border-orange-500/50 ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20 bg-orange-500/5',
-    'bg-violet-500': 'border-violet-500/50 ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/20 bg-violet-500/5',
   };
 
   const activeStyles = selectionStyles[color] || 'border-zinc-400/50 ring-2 ring-zinc-400/50 shadow-lg shadow-zinc-400/20 bg-zinc-400/5';
