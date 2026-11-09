@@ -5,6 +5,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { Groq } from 'groq-sdk';
 import { log } from './logger.js';
 import pool from '../db/pool.js';
 
@@ -15,6 +16,9 @@ const keys = [
 
 let currentKeyIndex = 0;
 let ai = new GoogleGenAI({ apiKey: keys[currentKeyIndex] });
+
+// Initialize Groq as high-speed, generous-quota fallback
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 
 const rotateKey = () => {
   if (keys.length < 2) return false;
@@ -28,8 +32,51 @@ const rotateKey = () => {
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
 /**
- * Generate content using Gemini with automatic key rotation on quota limits.
- * Native JSON mode (responseMimeType: 'application/json') is enabled by default.
+ * High-performance, free Groq fallback for unlimited topic generation & council synthesis.
+ */
+export const generateWithGroq = async (prompt, config = {}) => {
+  if (!groq) throw new Error("GROQ_API_KEY not configured");
+
+  // Groq models with high reliability & JSON support
+  const groqModels = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
+  let lastError = null;
+
+  for (const model of groqModels) {
+    try {
+      log.info(`[Groq AI Fallback] Generating with model: ${model}`);
+      const completion = await groq.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an elite impromptu speaking coach and question designer. You must ALWAYS return strictly valid, parseable JSON matching the requested schema.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: config.temperature ?? 0.7,
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (content) {
+        log.info(`[Groq AI Fallback] Successfully received response from ${model}`);
+        return content;
+      }
+    } catch (err) {
+      lastError = err;
+      log.warn(`[Groq AI Fallback] Model ${model} failed (${err.message}). Trying next Groq model...`);
+    }
+  }
+
+  throw lastError || new Error("All Groq models failed");
+};
+
+/**
+ * Generate content using Gemini with automatic key rotation and seamless Groq failover.
+ * Native JSON mode is enabled by default.
  */
 export const generateContent = async (prompt, modelName = DEFAULT_MODEL, config = {}) => {
   const requestConfig = {
@@ -48,18 +95,32 @@ export const generateContent = async (prompt, modelName = DEFAULT_MODEL, config 
     const status = error.status || error.code || 500;
     const msg = error.message || "";
     
-    // If Quota Exceeded, attempt rotation
-    if (status === 429 || msg.includes("Quota") || msg.includes("limit")) {
+    // 1. If Quota Exceeded or high demand, attempt Gemini rotation first
+    if (status === 429 || status === 503 || msg.includes("Quota") || msg.includes("limit") || msg.includes("high demand") || msg.includes("RESOURCE_EXHAUSTED")) {
       if (rotateKey()) {
-        // Re-attempt with new key
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: prompt,
-          config: requestConfig,
-        });
-        return response.text;
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: requestConfig,
+          });
+          return response.text;
+        } catch (rotatedError) {
+          log.warn(`Rotated Gemini key also hit limit (${rotatedError.message}).`);
+        }
       }
     }
+
+    // 2. Seamless Failover to Groq (Free, high-limit, ultra-fast)
+    if (groq) {
+      log.warn(`[AI Engine] Gemini unavailable (${status}: ${msg}). Seamlessly failing over to Groq...`);
+      try {
+        return await generateWithGroq(prompt, config);
+      } catch (groqErr) {
+        log.error("[AI Engine] Groq failover also encountered an error:", groqErr.message);
+      }
+    }
+
     throw error;
   }
 };
