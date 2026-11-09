@@ -4,6 +4,7 @@
  * Displays in-browser camera feed with live eye contact and face detection HUD.
  */
 
+import { useEffect } from 'react';
 import { Video, VideoOff, Eye, UserCheck, Loader2 } from 'lucide-react';
 
 export default function CameraPreview({
@@ -13,7 +14,14 @@ export default function CameraPreview({
   faceDetected,
   liveEyeContact,
   toggleCamera,
+  stream,
 }) {
+  useEffect(() => {
+    if (isCameraActive && stream && videoRef?.current && videoRef.current.srcObject !== stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraActive, stream, videoRef]);
   return (
     <div className="space-y-3">
       {/* Top Bar / Toggle */}
@@ -49,7 +57,16 @@ export default function CameraPreview({
       {isCameraActive ? (
         <div className="relative w-full aspect-video bg-zinc-950 rounded-2xl border border-zinc-800 overflow-hidden shadow-xl">
           <video
-            ref={videoRef}
+            ref={(node) => {
+              if (videoRef) {
+                if (typeof videoRef === 'function') videoRef(node);
+                else videoRef.current = node;
+              }
+              if (node && stream && node.srcObject !== stream) {
+                node.srcObject = stream;
+                node.play().catch(() => {});
+              }
+            }}
             autoPlay
             playsInline
             muted
