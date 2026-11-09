@@ -5,4 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 // Vite config: registers React (JSX transform) and Tailwind CSS (v4 Vite plugin)
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    host: true,
+    port: 5173,
+  },
 })
