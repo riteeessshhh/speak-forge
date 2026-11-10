@@ -101,12 +101,12 @@ export const markTopicUsed = async (client, id) => {
 
 /* ── SESSION & RECORDING QUERIES ── */
 
-export const insertSession = async (client, track, difficulty, topic, userId, status = 'completed', progressStep = 'ready') => {
+export const insertSession = async (client, track, difficulty, topic, userId, status = 'completed', progressStep = 'ready', audioUrl = null) => {
   const result = await client.query(
-    `INSERT INTO sessions(track_name, difficulty, topic_text, user_id, status, progress_step) 
-     VALUES($1, $2, $3, $4, $5, $6) 
+    `INSERT INTO sessions(track_name, difficulty, topic_text, user_id, status, progress_step, audio_url) 
+     VALUES($1, $2, $3, $4, $5, $6, $7) 
      RETURNING session_id`,
-    [track, difficulty, topic, userId, status, progressStep]
+    [track, difficulty, topic, userId, status, progressStep, audioUrl]
   );
   return result.rows[0].session_id;
 };
@@ -123,7 +123,7 @@ export const updateSessionStatus = async (client, sessionId, status, progressSte
 export const getSessionWithAnalysis = async (client, sessionId, userId) => {
   const result = await client.query(
     `SELECT s.session_id, s.track_name, s.difficulty, s.topic_text, s.status, s.progress_step, s.error_message, s.created_at,
-            r.s3_url, r.transcript, r.analysis_json,
+            COALESCE(r.s3_url, s.audio_url) AS s3_url, r.transcript, r.analysis_json,
             a.filler_word_count, a.confidence_score, a.clarity_score, a.structure_score
      FROM sessions s
      LEFT JOIN recordings r ON s.session_id = r.session_id

@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs';
 import { log } from '../lib/logger.js';
 import pool from '../db/pool.js';
 import { findUserByEmail, createUser, findUserById } from '../db/queries.js';
-import { COOKIE_OPTIONS } from '../middleware/auth.js';
+import { COOKIE_OPTIONS, extractTokenFromRequest } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { signupSchema, loginSchema } from '../schemas/index.js';
 
@@ -46,7 +46,7 @@ router.post('/signup', validate(signupSchema), async (req, res) => {
     res.cookie('sf_token', token, COOKIE_OPTIONS);
 
     log.info(`Signup successful: ${user.email}`);
-    res.status(201).json({ user: { id: user.id, email: user.email, createdAt: user.created_at } });
+    res.status(201).json({ user: { id: user.id, email: user.email, createdAt: user.created_at }, token });
   } catch (err) {
     log.error(`Signup Error at step: ${err.message}`);
     log.error(err.stack);
@@ -77,7 +77,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     res.cookie('sf_token', token, COOKIE_OPTIONS);
 
     log.info(`User logged in: ${user.email}`);
-    res.json({ user: { id: user.id, email: user.email, createdAt: user.created_at } });
+    res.json({ user: { id: user.id, email: user.email, createdAt: user.created_at }, token });
   } catch (err) {
     log.error('Login error:', err.message);
     res.status(500).json({ error: 'Internal server error.' });
@@ -92,8 +92,8 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 router.post('/logout', (req, res) => {
   res.clearCookie('sf_token', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+    secure: COOKIE_OPTIONS.secure,
+    sameSite: COOKIE_OPTIONS.sameSite,
     path: '/',
   });
   log.info('User logged out.');
@@ -104,7 +104,7 @@ router.post('/logout', (req, res) => {
  * GET /me
  */
 router.get('/me', async (req, res) => {
-  const token = req.cookies.sf_token;
+  const token = extractTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'Not authenticated.' });
 
   try {

@@ -22,7 +22,36 @@ import {
 
 const router = Router();
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit aligned with Groq Whisper
+});
+
+function resolveAudioFormat(audioFile) {
+  const rawMime = (audioFile.mimetype || '').toLowerCase();
+  const baseMime = rawMime.split(';')[0].trim() || 'audio/webm';
+  const origExt = (audioFile.originalname || '').split('.').pop()?.toLowerCase() || '';
+
+  const mimeMap = {
+    'audio/mp4': 'mp4',
+    'video/mp4': 'mp4',
+    'audio/x-m4a': 'm4a',
+    'audio/m4a': 'm4a',
+    'audio/aac': 'aac',
+    'audio/ogg': 'ogg',
+    'audio/opus': 'ogg',
+    'audio/wav': 'wav',
+    'audio/wave': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/flac': 'flac',
+    'audio/webm': 'webm',
+  };
+  const allowedExts = new Set(['webm', 'mp4', 'm4a', 'ogg', 'wav', 'mp3', 'mpeg', 'aac', 'flac']);
+  const ext = mimeMap[baseMime] || (allowedExts.has(origExt) ? origExt : 'webm');
+  return { ext, contentType: baseMime };
+}
 
 /**
  * Enqueue a new audio session for background processing.
@@ -46,21 +75,26 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
     return res.status(400).json({ error: 'No audio file provided' });
   }
 
+  if (!audioFile.buffer || audioFile.size < 100) {
+    return res.status(400).json({ error: 'Recording appears empty. Please check your microphone and speak for at least 1 second.' });
+  }
+
   if (!track || !difficulty || !topic) {
     return res.status(400).json({ error: 'Track, difficulty, and topic are required.' });
   }
 
-  log.info(`Received audio: ${audioFile.originalname} | Size: ${audioFile.size} bytes for user ${userId}`);
+  const { ext, contentType } = resolveAudioFormat(audioFile);
+  log.info(`Received audio: ${audioFile.originalname} (${contentType}, .${ext}) | Size: ${audioFile.size} bytes for user ${userId}`);
 
   try {
-    // 1. Upload audio to Supabase Storage immediately (~150-200ms)
+    // 1. Upload audio to Supabase Storage preserving container format/extension
     const tempId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    const fileName = `${tempId}.webm`;
+    const fileName = `${tempId}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
       .from('recordings')
       .upload(fileName, audioFile.buffer, {
-        contentType: audioFile.mimetype || 'audio/webm',
+        contentType,
       });
 
     if (uploadErr) {
@@ -72,11 +106,11 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       .getPublicUrl(fileName);
     const s3Url = publicUrlData.publicUrl;
 
-    // 2. Insert session with initial status 'processing' and progressStep 'transcribing'
+    // 2. Insert session with initial status 'processing', 'transcribing', and persisted audio_url
     const client = await pool.connect();
     let sessionId;
     try {
-      sessionId = await insertSession(client, track, difficulty, topic, userId, 'processing', 'transcribing');
+      sessionId = await insertSession(client, track, difficulty, topic, userId, 'processing', 'transcribing', s3Url);
     } finally {
       client.release();
     }
@@ -92,6 +126,7 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       visualMetrics,
       s3Url,
       fileName,
+      storagePath: fileName,
       audioBuffer: audioFile.buffer,
     });
 
@@ -133,9 +168,12 @@ router.get('/status/:sessionId', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Check fast in-memory tracker if available
+    // Prefer DB state once completed/failed; otherwise use faster in-memory tracker if present
     const memJob = getInMemoryJobStatus(sessionId);
-    const progressStep = memJob?.progressStep || sessionData.progress_step || 'ready';
+    const isTerminal = sessionData.status === 'completed' || sessionData.status === 'failed';
+    const progressStep = isTerminal
+      ? sessionData.progress_step
+      : (memJob?.progressStep || sessionData.progress_step || 'transcribing');
 
     return res.json({
       status: sessionData.status,
@@ -188,15 +226,22 @@ router.post('/reanalyze/:sessionId', verifyToken, async (req, res) => {
       client2.release();
     }
 
+    // Preserve extension from stored URL for accurate Whisper decoding
+    const urlPath = sessionData.s3_url.split('?')[0] || '';
+    const storedExt = urlPath.includes('.') ? urlPath.split('.').pop()?.toLowerCase() : 'webm';
+    const safeExt = ['webm', 'mp4', 'm4a', 'ogg', 'wav', 'mp3', 'mpeg', 'aac', 'flac'].includes(storedExt) ? storedExt : 'webm';
+
     const jobInfo = await addAnalysisJob({
       sessionId,
       userId,
       track: sessionData.track_name,
       difficulty: sessionData.difficulty,
       topic: sessionData.topic_text,
-      isBehavioral: false,
+      isBehavioral: sessionData.track_name?.toLowerCase().includes('behavioral') || false,
       s3Url: sessionData.s3_url,
-      fileName: `${sessionId}.webm`,
+      fileName: `${sessionId}.${safeExt}`,
+      storagePath: urlPath.includes('/recordings/') ? urlPath.slice(urlPath.lastIndexOf('/recordings/') + '/recordings/'.length) : urlPath.split('/').pop(),
+      isReanalyze: true,
     });
 
     return res.status(202).json({

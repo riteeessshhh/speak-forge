@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 /**
  * useAudioRecorder hook
  * Manages the microphone stream and recording lifecycle.
- * Version 7.0: Senior Web Media Hardware Decoupling.
+ * Version 7.1: Cross-Browser Mobile Safe MIME Negotiation + Stale Closure Hardening.
  */
 export function useAudioRecorder() {
   const [status, setStatus] = useState('idle'); // 'idle' | 'recording' | 'processing' | 'ready'
@@ -12,10 +12,16 @@ export function useAudioRecorder() {
   const [stream, setStream] = useState(null); // State for UI visuals only
   const [error, setError] = useState(null);
   
+  const statusRef = useRef('idle');
   const streamRef = useRef(null); // Ref for strict hardware control
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const stopTimeoutRef = useRef(null);
+
+  const updateStatus = useCallback((next) => {
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
 
   const clearAudio = useCallback(() => {
     if (audioUrl) {
@@ -23,8 +29,8 @@ export function useAudioRecorder() {
       setAudioUrl(null);
       setAudioBlob(null);
     }
-    setStatus('idle');
-  }, [audioUrl]);
+    updateStatus('idle');
+  }, [audioUrl, updateStatus]);
 
   const startRecording = useCallback(async () => {
     console.log("[Recorder] startRecording hook entry");
@@ -48,16 +54,19 @@ export function useAudioRecorder() {
       const types = [
         'audio/webm;codecs=opus',
         'audio/webm',
-        'audio/ogg;codecs=opus',
         'audio/mp4',
+        'audio/ogg;codecs=opus',
         'audio/aac'
       ];
       
-      let mimeType = types.find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
-      console.log(`[Recorder] Selected MIME: ${mimeType}`);
+      const supportedMime = typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function'
+        ? types.find(t => MediaRecorder.isTypeSupported(t))
+        : null;
+      console.log(`[Recorder] Selected MIME: ${supportedMime || '(browser default)'}`);
 
-      const options = { mimeType };
-      const mediaRecorder = new MediaRecorder(newStream, options);
+      const mediaRecorder = supportedMime
+        ? new MediaRecorder(newStream, { mimeType: supportedMime })
+        : new MediaRecorder(newStream);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
@@ -71,16 +80,10 @@ export function useAudioRecorder() {
         
         // 1. Final Flush Logic: Capture chunks immediately
         const finalChunks = [...chunksRef.current];
-        
-        // 2. Commit Blobs
-        const finalType = mediaRecorder.mimeType || 'audio/webm';
+        const finalType = mediaRecorder.mimeType || supportedMime || 'audio/webm';
         const blob = new Blob(finalChunks, { type: finalType });
-        const url = URL.createObjectURL(blob);
         
-        setAudioUrl(url);
-        setAudioBlob(blob);
-        
-        // 3. Hardware Release
+        // 2. Hardware Release
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
@@ -88,50 +91,66 @@ export function useAudioRecorder() {
         setStream(null);
         chunksRef.current = [];
 
-        // 4. Signal Ready (Absolute final line)
-        setStatus('ready');
+        if (!blob || blob.size < 100) {
+          console.warn("[Recorder] Empty audio blob captured:", blob?.size);
+          setAudioUrl(null);
+          setAudioBlob(null);
+          setError("No audio captured. Check microphone permissions and try speaking longer.");
+          updateStatus('idle');
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        setAudioBlob(blob);
+
+        // 3. Signal Ready (Absolute final line)
+        updateStatus('ready');
       };
 
       clearAudio();
       mediaRecorder.start(500);
-      setStatus('recording');
+      updateStatus('recording');
     } catch (err) {
       console.error("[Recorder] Start Error:", err);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
       setError(err.message || "Could not access microphone.");
-      setStatus('idle');
+      updateStatus('idle');
       setStream(null);
       throw err;
     }
-  }, [clearAudio]); 
+  }, [clearAudio, updateStatus]); 
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      setStatus('processing');
+      updateStatus('processing');
       
       // Safety timeout for onstop event (3 seconds)
       stopTimeoutRef.current = setTimeout(() => {
-        if (status === 'processing') {
+        if (statusRef.current === 'processing') {
           console.error("[Recorder] onstop timeout. Force reset.");
-          setStatus('idle');
+          updateStatus('idle');
           setError("Recording failed to finalize. Check mic and try again.");
         }
       }, 3000);
 
       mediaRecorderRef.current.stop();
     }
-  }, [status]);
+  }, [updateStatus]);
 
   // Cleanup effect: Strictly hardware-focused, decoupled from render cycle
   useEffect(() => {
     return () => {
       if (stopTimeoutRef.current) clearTimeout(stopTimeoutRef.current);
-      // Only stop if the ref actually holds a stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
     };
-  }, []); // Absolute hardware control
+  }, []);
 
   return { 
     status,

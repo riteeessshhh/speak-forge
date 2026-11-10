@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     status VARCHAR(50) DEFAULT 'completed',
     error_message TEXT DEFAULT NULL,
     progress_step VARCHAR(50) DEFAULT 'ready',
+    audio_url TEXT DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_sessions_user
         FOREIGN KEY(user_id)
@@ -32,7 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_status ON sessions(user_id, status)
 -- Table: recordings
 CREATE TABLE IF NOT EXISTS recordings (
     recording_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL,
+    session_id UUID NOT NULL UNIQUE,
     s3_url TEXT NOT NULL,
     transcript TEXT NOT NULL,
     analysis_json JSONB NOT NULL,
@@ -75,7 +76,7 @@ CREATE TABLE IF NOT EXISTS generated_topics (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recordings_session_id ON recordings(session_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_user_id ON analytics(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 

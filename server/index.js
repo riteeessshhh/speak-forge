@@ -16,6 +16,7 @@ import topicRoutes from './routes/topics.js';
 import uploadRoutes from './routes/upload.js';
 import analyticsRoutes from './routes/analytics.js';
 import { initQueue } from './lib/queue.js';
+import { ensureDatabaseSchema } from './db/initSchema.js';
 
 // Initialize environment
 // (Moved to top)
@@ -75,9 +76,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error.' });
 });
 
-// Start Server
-app.listen(PORT, () => {
-  log.info(`SpeakForge Server running on port ${PORT}`);
-  log.info(`CORS allowed from: ${baseOrigin} (and / version)`);
-  initQueue();
-});
+// Start Server after idempotent DB schema check
+async function startServer() {
+  try {
+    await ensureDatabaseSchema();
+  } catch (err) {
+    log.error('Startup DB schema check failed (server continuing):', err.message);
+  }
+
+  app.listen(PORT, () => {
+    log.info(`SpeakForge Server running on port ${PORT}`);
+    log.info(`CORS allowed from: ${baseOrigin} (and / version)`);
+    initQueue();
+  });
+}
+
+startServer();

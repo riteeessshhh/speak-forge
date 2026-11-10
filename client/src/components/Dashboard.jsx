@@ -20,9 +20,9 @@ import {
   Area
 } from "recharts";
 
-import { API_URL } from "../lib/api";
+import { API_URL, getAuthHeaders } from "../lib/api";
 
-export default function Dashboard({ onBack }) {
+export default function Dashboard({ onBack, onOpenSession }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,6 +31,7 @@ export default function Dashboard({ onBack }) {
     try {
       const res = await fetch(`${API_URL}/api/analytics/summary`, {
         credentials: 'include',
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error('Failed to fetch analytics');
       const json = await res.json();
@@ -46,18 +47,54 @@ export default function Dashboard({ onBack }) {
     fetchSummary();
   }, []);
 
+  // Auto-refresh while any session is still processing in background queue
+  useEffect(() => {
+    const hasProcessing = (data?.sessions || []).some((s) => s.status === 'processing');
+    if (!hasProcessing) return;
+    const timer = setInterval(() => {
+      fetchSummary();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [data]);
+
   const handleReanalyze = async (sessionId) => {
     try {
       toast.loading("Enqueuing re-analysis...", { id: "reanalyze" });
       const res = await fetch(`${API_URL}/api/upload/reanalyze/${sessionId}`, {
         method: "POST",
         credentials: "include",
+        headers: getAuthHeaders(),
       });
-      if (!res.ok) throw new Error("Failed to re-analyze");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Failed to re-analyze");
       toast.success("Session queued for re-analysis!", { id: "reanalyze" });
       await fetchSummary();
     } catch (e) {
       toast.error(e.message, { id: "reanalyze" });
+    }
+  };
+
+  const handleViewSession = async (sessionId) => {
+    if (!onOpenSession) return;
+    try {
+      toast.loading("Loading analysis...", { id: "view-session" });
+      const res = await fetch(`${API_URL}/api/upload/status/${sessionId}`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.analysisJson) {
+        throw new Error(body.error || "Analysis data not found for this session");
+      }
+      toast.dismiss("view-session");
+      const parsed = typeof body.analysisJson === 'string' ? JSON.parse(body.analysisJson) : body.analysisJson;
+      onOpenSession({
+        ...parsed,
+        topic: body.topic,
+        transcriptText: body.transcriptText,
+      });
+    } catch (e) {
+      toast.error(e.message, { id: "view-session" });
     }
   };
 
@@ -242,6 +279,8 @@ export default function Dashboard({ onBack }) {
     return score;
   };
 
+  const recentSessionCount = sessions.length;
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6 animate-fade-in-up pb-12 px-0 lg:px-0">
       {/* Header */}
@@ -261,7 +300,7 @@ export default function Dashboard({ onBack }) {
         </button>
       </div>
 
-      {totalSessions > 0 ? (
+      {totalSessions > 0 || recentSessionCount > 0 ? (
         <div className="space-y-6">
           {/* Summary Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4 px-4 lg:px-0">
@@ -382,8 +421,8 @@ export default function Dashboard({ onBack }) {
             </div>
           </div>
 
-          {/* Recent Activity - Hidden on Desktop, Visible on Mobile */}
-          <div className="lg:hidden bg-zinc-900/30 border border-zinc-800/50 rounded-3xl overflow-hidden mx-4 lg:mx-0">
+          {/* Recent Activity - Visible on All Viewports */}
+          <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-3xl overflow-hidden mx-4 lg:mx-0">
             <div className="px-6 py-4 border-b border-zinc-800/50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <History className="w-4 h-4 text-zinc-500" />
@@ -428,7 +467,7 @@ export default function Dashboard({ onBack }) {
                           <button
                             onClick={() => handleReanalyze(s.session_id)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-bold hover:bg-rose-500/20 transition-all cursor-pointer"
-                            title="Click to retry analysis"
+                            title={s.error_message || "Click to retry analysis"}
                           >
                             <RotateCcw className="w-3 h-3" />
                             <span>Retry</span>
@@ -438,6 +477,13 @@ export default function Dashboard({ onBack }) {
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
                             Analyzing...
                           </span>
+                        ) : onOpenSession ? (
+                          <button
+                            onClick={() => handleViewSession(s.session_id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition-all cursor-pointer uppercase tracking-wider"
+                          >
+                            <span>View</span>
+                          </button>
                         ) : (
                           <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
                             Ready

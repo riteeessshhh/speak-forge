@@ -49,6 +49,7 @@ export async function processAnalysisJob(jobData) {
     visualMetrics, 
     s3Url, 
     fileName,
+    storagePath,
     audioBuffer: rawBuffer 
   } = jobData;
 
@@ -61,12 +62,43 @@ export async function processAnalysisJob(jobData) {
     // ─── STEP 1: TRANSCRIBING ───
     await updateSessionStatus(client, sessionId, 'processing', 'transcribing');
 
-    let audioBuffer = rawBuffer;
-    if (!audioBuffer && s3Url) {
-      log.info(`[Job ${sessionId}] Fetching audio buffer from Supabase storage: ${s3Url}`);
-      const resp = await fetch(s3Url);
-      if (!resp.ok) throw new Error(`Failed to fetch audio from storage: ${resp.statusText}`);
-      audioBuffer = Buffer.from(await resp.arrayBuffer());
+    let audioBuffer = Buffer.isBuffer(rawBuffer)
+      ? rawBuffer
+      : (rawBuffer?.type === 'Buffer' && Array.isArray(rawBuffer?.data) ? Buffer.from(rawBuffer.data) : null);
+
+    if (!audioBuffer && (storagePath || s3Url)) {
+      let objectPath = storagePath;
+      if (!objectPath && s3Url) {
+        const cleanUrl = s3Url.split('?')[0];
+        const marker = '/recordings/';
+        const markerIdx = cleanUrl.lastIndexOf(marker);
+        objectPath = markerIdx >= 0
+          ? cleanUrl.slice(markerIdx + marker.length)
+          : cleanUrl.split('/').pop();
+      }
+
+      if (objectPath) {
+        log.info(`[Job ${sessionId}] Downloading audio via Supabase SDK: ${objectPath}`);
+        const { data: blobData, error: dlErr } = await supabase.storage
+          .from('recordings')
+          .download(objectPath);
+
+        if (!dlErr && blobData) {
+          audioBuffer = Buffer.from(await blobData.arrayBuffer());
+        } else {
+          log.warn(`[Job ${sessionId}] Supabase SDK download failed (${dlErr?.message}), trying direct URL fetch...`);
+        }
+      }
+
+      if (!audioBuffer && s3Url) {
+        const resp = await fetch(s3Url);
+        if (!resp.ok) throw new Error(`Failed to fetch audio from storage: ${resp.statusText}`);
+        audioBuffer = Buffer.from(await resp.arrayBuffer());
+      }
+    }
+
+    if (!audioBuffer || audioBuffer.length === 0) {
+      throw new Error("Audio buffer is missing or empty.");
     }
 
     if (!groq) {
@@ -256,13 +288,16 @@ export function initQueue() {
  * Enqueue a new analysis job.
  */
 export async function addAnalysisJob(jobData) {
-  const { sessionId } = jobData;
+  const { sessionId, isReanalyze } = jobData;
   inMemoryJobs.set(sessionId, { status: 'queued', progressStep: 'transcribing', error: null });
 
   if (isRedisAvailable && analysisQueue) {
     try {
-      const job = await analysisQueue.add('analyze', jobData, {
-        jobId: sessionId,
+      // Omit binary audioBuffer in Redis JSON payload; worker downloads cleanly from Supabase s3Url
+      const { audioBuffer, ...serializableJobData } = jobData;
+      const bullJobId = isReanalyze ? `${sessionId}-re-${Date.now()}` : sessionId;
+      const job = await analysisQueue.add('analyze', serializableJobData, {
+        jobId: bullJobId,
       });
       log.info(`[Queue] Session ${sessionId} enqueued in BullMQ (Job ID: ${job.id})`);
       return { type: 'bullmq', jobId: job.id };

@@ -24,7 +24,7 @@ import AudioVisualizer from "./components/AudioVisualizer";
 import AudioPlayer from "./components/AudioPlayer";
 import CameraPreview from "./components/CameraPreview";
 import Skeleton, { SkeletonText } from "./components/Skeleton";
-import { API_URL } from "./lib/api";
+import { API_URL, getAuthHeaders } from "./lib/api";
 
 /* ── Card data ── */
 const arenaCards = [
@@ -126,11 +126,12 @@ function AppContent() {
   const [isGeneratingTopic, setIsGeneratingTopic] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [copiedExemplar, setCopiedExemplar] = useState(false);
   const isSessionActive = ["thinking", "recording", "review"].includes(phase);
 
-  const { status, isRecording, audioUrl, audioBlob, stream, startRecording, stopRecording, clearAudio } = useAudioRecorder();
+  const { status, isRecording, audioUrl, audioBlob, stream, error: recorderError, startRecording, stopRecording, clearAudio } = useAudioRecorder();
   const vision = useVisionPresence();
 
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -243,7 +244,7 @@ function AppContent() {
 
         const res = await fetch(`${API_URL}/api/generate-topic`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           credentials: 'include',
           body: JSON.stringify({
             track: selectedCard.trackName,
@@ -320,15 +321,17 @@ function AppContent() {
   };
 
   useEffect(() => {
-    // Reactive Transition: Selection -> Review
+    // Reactive Transition: Recording -> Review
     if (phase === "recording" && status === "ready" && audioUrl) {
+      setAnalysisError(null);
       setPhase("review");
     }
     // Error toast if recording fails
     if (status === 'idle' && phase === 'recording' && !audioBlob) {
-      toast.error("Recording failed. Please check your mic and try again.");
+      toast.error(recorderError || "Recording failed. Please check your mic and try again.");
+      setPhase("thinking");
     }
-  }, [phase, status, audioUrl, audioBlob]);
+  }, [phase, status, audioUrl, audioBlob, recorderError]);
 
   const handleReset = () => {
     clearAudio();
@@ -338,6 +341,7 @@ function AppContent() {
     setSelectedDifficulty(null);
     setCurrentTopic(null);
     setAnalysisResult(null);
+    setAnalysisError(null);
     setShowDashboard(false);
   };
 
@@ -352,13 +356,52 @@ function AppContent() {
   const startJobPolling = useCallback((sessionId, topicText) => {
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
 
+    let pollAttempts = 0;
+    let consecutiveErrors = 0;
+
     pollTimerRef.current = setInterval(async () => {
+      pollAttempts += 1;
+      if (pollAttempts > 90) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+        setIsAnalyzing(false);
+        setAnalysisError("Analysis took longer than expected. Check Analytics in a moment or retry.");
+        toast.error("Analysis timed out while polling. Check Analytics or retry.");
+        return;
+      }
+
       try {
         const res = await fetch(`${API_URL}/api/upload/status/${sessionId}`, {
           credentials: 'include',
+          headers: getAuthHeaders(),
         });
-        if (!res.ok) return;
 
+        if (res.status === 401 || res.status === 404) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setIsAnalyzing(false);
+          setActiveJobSessionId(null);
+          const msg = res.status === 401
+            ? "Session expired. Please log in again."
+            : "Analysis session could not be found.";
+          setAnalysisError(msg);
+          toast.error(msg);
+          return;
+        }
+
+        if (!res.ok) {
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= 6) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+            setIsAnalyzing(false);
+            setAnalysisError(`Unable to reach server (HTTP ${res.status}). Please retry.`);
+            toast.error("Lost connection to analysis server. Please retry.");
+          }
+          return;
+        }
+
+        consecutiveErrors = 0;
         const data = await res.json();
         if (data.progressStep) {
           setJobProgressStep(data.progressStep);
@@ -369,13 +412,20 @@ function AppContent() {
           pollTimerRef.current = null;
           setIsAnalyzing(false);
           setActiveJobSessionId(null);
+          setAnalysisError(null);
+
+          const parsedAnalysis = typeof data.analysisJson === 'string'
+            ? JSON.parse(data.analysisJson)
+            : data.analysisJson;
 
           const fullResult = {
-            ...data.analysisJson,
-            deliveryMetrics: data.analysisJson.deliveryMetrics,
-            visualMetrics: data.analysisJson.visualMetrics,
-            habitTrends: data.analysisJson.habitTrends,
-            vocabularyUpgrades: data.analysisJson.vocabularyUpgrades,
+            ...parsedAnalysis,
+            topic: topicText || data.topic || currentTopic?.topic,
+            transcriptText: data.transcriptText,
+            deliveryMetrics: parsedAnalysis.deliveryMetrics,
+            visualMetrics: parsedAnalysis.visualMetrics,
+            habitTrends: parsedAnalysis.habitTrends,
+            vocabularyUpgrades: parsedAnalysis.vocabularyUpgrades,
           };
           setAnalysisResult(fullResult);
 
@@ -394,6 +444,7 @@ function AppContent() {
                   onClick={() => {
                     toast.dismiss(t.id);
                     setAnalysisResult(fullResult);
+                    setShowDashboard(false);
                     setPhase('analysis');
                   }}
                   className="px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-bold text-[11px] cursor-pointer shrink-0 ml-2"
@@ -408,18 +459,35 @@ function AppContent() {
           pollTimerRef.current = null;
           setIsAnalyzing(false);
           setActiveJobSessionId(null);
-          toast.error(`Analysis failed: ${data.errorMessage || 'Please try again.'}`);
+          const failMsg = data.errorMessage || 'Analysis failed. Please try again.';
+          setAnalysisError(failMsg);
+          toast.error(`Analysis failed: ${failMsg}`);
         }
       } catch (err) {
         console.error("Polling error:", err);
+        consecutiveErrors += 1;
+        if (consecutiveErrors >= 6) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setIsAnalyzing(false);
+          setAnalysisError("Network error while checking analysis progress. Please retry.");
+          toast.error("Network error while checking analysis progress.");
+        }
       }
     }, 1500);
-  }, [API_URL]);
+  }, [currentTopic?.topic]);
 
   const handleSubmitForAnalysis = async () => {
-    if (!audioBlob) return;
+    if (!audioBlob || !currentTopic) return;
+    if (audioBlob.size < 100) {
+      toast.error("Recording appears empty. Please record again.");
+      return;
+    }
+
     setIsAnalyzing(true);
+    setAnalysisError(null);
     setJobProgressStep('transcribing');
+
     try {
       const extension = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
       const formData = new FormData();
@@ -432,22 +500,32 @@ function AppContent() {
       }
       formData.append('audio', audioBlob, `recording.${extension}`);
 
+      const controller = new AbortController();
+      const uploadTimeout = setTimeout(() => controller.abort(), 45000);
+
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
         body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(uploadTimeout);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Analysis request failed');
+        throw new Error(errorData.error || `Upload failed (${response.status})`);
       }
 
       const data = await response.json();
       setActiveJobSessionId(data.sessionId);
       startJobPolling(data.sessionId, currentTopic.topic);
     } catch (err) {
-      toast.error(err.message);
+      const msg = err.name === 'AbortError'
+        ? 'Upload timed out. Check your connection and try again.'
+        : (err.message || 'Analysis request failed');
+      setAnalysisError(msg);
+      toast.error(msg);
       setIsAnalyzing(false);
     }
   };
@@ -524,7 +602,14 @@ function AppContent() {
       <main className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-5 sm:py-7 overflow-y-auto">
         <div className="max-w-7xl w-full mx-auto flex-1 flex flex-col min-h-0">
           {showDashboard ? (
-            <Dashboard onBack={() => setShowDashboard(false)} />
+            <Dashboard
+              onBack={() => setShowDashboard(false)}
+              onOpenSession={(sessionPayload) => {
+                setAnalysisResult(sessionPayload);
+                setShowDashboard(false);
+                setPhase("analysis");
+              }}
+            />
           ) : (
             <>
               {/* PHASE: SELECTION */}
@@ -758,6 +843,16 @@ function AppContent() {
                       )}
                     </div>
                     
+                    {analysisError && !isAnalyzing && (
+                      <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 text-xs text-rose-300 flex items-start gap-2.5">
+                        <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-bold text-rose-200">Speech Analysis Failed</p>
+                          <p className="text-rose-300/90 leading-relaxed">{analysisError}</p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                       {isAnalyzing ? (
                         <div className="w-full h-14 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 animate-pulse cursor-not-allowed">
@@ -776,7 +871,7 @@ function AppContent() {
                             onClick={handleSubmitForAnalysis} 
                             className="w-full sm:flex-1 h-14 px-10 rounded-full bg-white text-black font-black text-[11px] uppercase tracking-widest hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] transition-all cursor-pointer flex items-center justify-center gap-2"
                           >
-                            Get AI Feedback <Sparkles className="w-4 h-4" />
+                            {analysisError ? "Retry AI Feedback" : "Get AI Feedback"} <Sparkles className="w-4 h-4" />
                           </button>
                         </>
                       )}
@@ -888,7 +983,7 @@ function AppContent() {
                         )}
                       </div>
                       <h3 className="text-sm sm:text-base font-bold text-white truncate max-w-xl">
-                        {currentTopic?.topic}
+                        {analysisResult.topic || currentTopic?.topic}
                       </h3>
                     </div>
 
