@@ -39,7 +39,7 @@ Return JSON ONLY with this schema:
 }`;
 
   try {
-    const raw = await generateContent(judgePrompt, 'gemini-3.5-flash');
+    const raw = await generateContent(judgePrompt, 'gemini-3-flash-preview', { preferProvider: 'groq' });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);

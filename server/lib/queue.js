@@ -8,6 +8,7 @@
  * 4. Granular progress tracking: 'transcribing' -> 'evaluating' -> 'storing' -> 'ready'.
  */
 
+import './env.js';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import Groq, { toFile } from 'groq-sdk';
@@ -23,7 +24,7 @@ import {
   insertAnalytics 
 } from '../db/queries.js';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 const QUEUE_NAME = 'analysis-queue';
 
 let analysisQueue = null;
@@ -66,6 +67,10 @@ export async function processAnalysisJob(jobData) {
       const resp = await fetch(s3Url);
       if (!resp.ok) throw new Error(`Failed to fetch audio from storage: ${resp.statusText}`);
       audioBuffer = Buffer.from(await resp.arrayBuffer());
+    }
+
+    if (!groq) {
+      throw new Error("GROQ_API_KEY is not configured on the server for speech transcription.");
     }
 
     const transcription = await groq.audio.transcriptions.create({

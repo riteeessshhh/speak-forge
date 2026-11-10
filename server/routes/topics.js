@@ -1,7 +1,9 @@
 /**
- * routes/topics.js — Topic Generation Route
+ * routes/topics.js — Live AI Topic Generation Route
  * 
  * POST / (mounted at /api/generate-topic)
+ * Generates a fresh, non-repeating AI prompt on every call using Groq (primary, ~200-700ms)
+ * with automatic Gemini fallback, and falls back to PostgreSQL unseen/LRU topics if APIs are offline.
  */
 
 import { Router } from 'express';
@@ -11,10 +13,8 @@ import pool from '../db/pool.js';
 import { verifyToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { topicSchema } from '../schemas/index.js';
-import { generateContent, withExponentialBackoff, refillTopicCache } from '../lib/ai.js';
+import { generateContent, refillTopicCache } from '../lib/ai.js';
 import {
-  countCachedTopics,
-  countUnseenTopics,
   getUnseenTopic,
   getLruTopic,
   getRandomTopic,
@@ -23,112 +23,168 @@ import {
 
 const router = Router();
 
+// Per-user in-memory recent topic tracker (prevents back-to-back repeats)
+const recentUserTopics = new Map();
+
+function recordRecentTopic(userId, text) {
+  if (!userId || !text) return;
+  const list = recentUserTopics.get(userId) || [];
+  list.unshift(text);
+  if (list.length > 20) list.pop();
+  recentUserTopics.set(userId, list);
+}
+
 const generateLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 60, // 60 requests per minute
-  message: { error: "Forge is busy. Falling back to local data." },
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: (req) => req.user?.id || req.ip,
+  validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false },
+  message: { error: "Too many prompt requests. Please wait a moment." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
+function getTrackPromptGuidance(track, difficulty) {
+  const t = (track || '').toLowerCase();
+  if (t.includes('hr') || t.includes('behavioral')) {
+    return `Arena: HR & Behavioral Interviews (Difficulty: ${difficulty}).
+Focus: ${difficulty === 'easy'
+      ? 'HR personality screening, career motivation, work ethic, strengths/weaknesses, teamwork basics.'
+      : difficulty === 'medium'
+        ? 'STAR behavioral scenarios: resolving team conflict, missing a deadline, handling tough feedback, taking ownership.'
+        : 'Executive & leadership behavioral dilemmas: disagreeing with senior leadership, ethical gray areas, managing crisis/ambiguity.'}`;
+  }
+  if (t.includes('tech') || t.includes('cs')) {
+    return `Arena: Core Computer Science & Software Engineering (Difficulty: ${difficulty}).
+Focus: ${difficulty === 'easy'
+      ? 'Core OOP concepts, basic SQL vs NoSQL/DBMS, HTTP/TCP networking basics, arrays/hashmaps, clean code analogies.'
+      : difficulty === 'medium'
+        ? 'OS processes/threads/deadlocks, DBMS indexing/ACID transactions, REST vs WebSockets, DSA trade-offs, caching strategies.'
+        : 'Fresher System Design (URL shortener, rate limiter, chat app, feed), distributed consistency, database sharding, latency bottlenecks.'}`;
+  }
+  if (t.includes('story') || t.includes('social')) {
+    return `Arena: Storytelling & Social Charisma (Difficulty: ${difficulty}).
+Focus: ${difficulty === 'easy'
+      ? 'Relatable everyday moments, hobbies, travel mishaps, memorable conversations, turning small talk into genuine connection.'
+      : difficulty === 'medium'
+        ? 'Turning failures into funny or meaningful stories, unexpected kindness, vivid descriptive storytelling with an emotional arc.'
+        : 'Deep vulnerable or inspiring narratives, philosophical social prompts, captivating a skeptical dinner table in 60 seconds.'}`;
+  }
+  return `Arena: Never-Go-Blank Spontaneous Speaking Drill (Difficulty: ${difficulty}).
+Focus: ${difficulty === 'easy'
+    ? 'Fun, concrete everyday objects or quirky prompts where the speaker connects a simple thing to a personal viewpoint.'
+    : difficulty === 'medium'
+      ? 'Creative juxtapositions, unconventional scenarios, surprising analogies, defending an interesting perspective on the fly.'
+      : 'Abstract metaphors, paradoxes, or high-pressure curveballs designed to test poise and zero-hesitation improv speaking.'}`;
+}
+
+function parseSingleTopic(rawJson) {
+  let cleanJson = (rawJson || '').trim();
+  const match = cleanJson.match(/\{[\s\S]*\}/);
+  if (match) cleanJson = match[0];
+  const parsed = JSON.parse(cleanJson);
+  const text = (parsed?.text || parsed?.topic || parsed?.question || parsed?.prompt || '').trim();
+  if (!text || text.length < 10) return null;
+  return {
+    text,
+    isBehavioral: Boolean(parsed?.isBehavioral),
+  };
+}
+
 router.post('/', verifyToken, generateLimiter, validate(topicSchema), async (req, res) => {
-  const { track, difficulty } = req.validated;
+  const { track, difficulty, excludeTopics = [] } = req.validated;
   const userId = req.user.id;
 
-  log.info(`Generating topic for: ${track} | User: ${userId}`);
+  log.info(`Generating live topic for: ${track} (${difficulty}) | User: ${userId}`);
 
+  const recentList = [...new Set([...(recentUserTopics.get(userId) || []), ...excludeTopics])].slice(0, 12);
+  const avoidBlock = recentList.length > 0
+    ? `\nDO NOT repeat or closely paraphrase any of these recent topics:\n- ${recentList.slice(0, 6).join('\n- ')}`
+    : '';
+
+  // Randomize creative angle slightly so consecutive live prompts stay super diverse
+  const seedAngle = Math.floor(Math.random() * 100000);
+
+  // 1. Live AI Synthesis FIRST (Groq primary ~200-700ms -> automatic Gemini fallback)
   try {
-    let unseenCount = 0;
+    const prompt = `${getTrackPromptGuidance(track, difficulty)}
+Variation Seed: #${seedAngle}
+Generate 1 BRAND NEW, engaging, crisp spoken prompt/question (1-2 sentences max, natural to answer in 60-90 seconds).${avoidBlock}
 
-    // 1. Check unseen count (short-lived connection)
-    const countClient = await pool.connect();
-    try {
-      if (userId) {
-        unseenCount = await countUnseenTopics(countClient, track, difficulty, userId);
-        log.info(`User: ${userId} has ${unseenCount} unseen topics for ${track}/${difficulty}`);
+Return JSON ONLY matching this schema:
+{"text": "the prompt or question", "isBehavioral": boolean}
+Set isBehavioral=true ONLY if it specifically asks for a past personal/work example ("Tell me about a time...").`;
+
+    const rawJson = await generateContent(prompt, undefined, {
+      preferProvider: 'groq',
+      preferFast: true,
+      temperature: 0.9,
+      timeoutMs: 9000,
+    });
+
+    const parsed = parseSingleTopic(rawJson);
+    if (parsed) {
+      recordRecentTopic(userId, parsed.text);
+      log.info(`[Topic Engine] Live prompt ready: "${parsed.text.substring(0, 45)}..."`);
+
+      // Persist asynchronously without blocking user response or holding DB lock
+      pool.query(
+        `INSERT INTO generated_topics(track_name, difficulty, topic_text, is_behavioral, is_used)
+         VALUES($1, $2, $3, $4, true)
+         ON CONFLICT (topic_text) DO UPDATE SET is_used = true`,
+        [track, difficulty, parsed.text, parsed.isBehavioral]
+      ).catch((dbErr) => log.warn(`[Topic Engine] Async topic persist skipped: ${dbErr.message}`));
+
+      return res.json({
+        topic: parsed.text,
+        track,
+        difficulty,
+        isBehavioral: parsed.isBehavioral,
+        source: 'live-ai',
+      });
+    }
+  } catch (aiErr) {
+    log.warn(`[Topic Engine] Live AI synthesis failed (${aiErr.message}). Checking DB cache...`);
+  }
+
+  // 2. Fallback: Query PostgreSQL DB cache if live AI synthesis couldn't complete
+  let client;
+  try {
+    client = await pool.connect();
+    let topic = null;
+    if (userId) {
+      topic = await getUnseenTopic(client, track, difficulty, userId);
+      if (!topic) {
+        topic = await getLruTopic(client, track, difficulty, userId);
       }
-    } finally {
-      countClient.release();
+    }
+    if (!topic) {
+      topic = await getRandomTopic(client, track, difficulty);
     }
 
-    // 2. Proactive Background Refill: If unseenCount is less than 3, trigger background cache refill
-    if (unseenCount < 3) {
-      log.info(`Low unseen topics count (${unseenCount}) for ${track}/${difficulty}. Scheduling background cache refill...`);
-      refillTopicCache(track, difficulty).catch(err => {
-        log.warn(`[Background Cache] Proactive refill error: ${err.message}`);
+    if (topic) {
+      recordRecentTopic(userId, topic.topic_text);
+      if (topic.id) await markTopicUsed(client, topic.id);
+      log.info(`[Topic Engine] Served DB cached topic: "${topic.topic_text.substring(0, 40)}..."`);
+
+      // Trigger background refill cleanly
+      refillTopicCache(track, difficulty).catch(() => {});
+
+      return res.json({
+        topic: topic.topic_text,
+        track,
+        difficulty,
+        isBehavioral: topic.is_behavioral || false,
+        source: 'db-cache',
       });
     }
 
-    // 3. Get topic and return (short-lived connection)
-    const client = await pool.connect();
-    try {
-      let topic = null;
-      if (userId) {
-        topic = await getUnseenTopic(client, track, difficulty, userId);
-      }
-
-      // If user has seen all topics or DB cache is empty, synthesize a fresh novel topic LIVE on-demand!
-      if (!topic) {
-        log.info(`[Topic Engine] Generating fresh, unique prompt on-demand for ${track}/${difficulty}...`);
-        try {
-          const onDemandPrompt = `Track: "${track}", Difficulty: "${difficulty}". Generate 1 BRAND NEW, creative, challenging, impromptu speaking question.
-JSON ONLY format: {"text": "the prompt text", "isBehavioral": boolean}.
-isBehavioral must be true if past work/life experience is needed, false otherwise.`;
-
-          const rawJson = await generateContent(onDemandPrompt);
-          let cleanJson = (rawJson || '').trim();
-          const match = cleanJson.match(/\{[\s\S]*\}/);
-          if (match) cleanJson = match[0];
-          const parsed = JSON.parse(cleanJson);
-
-          if (parsed && (parsed.text || parsed.topic)) {
-            const promptText = (parsed.text || parsed.topic).trim();
-            const isBehavioral = Boolean(parsed.isBehavioral);
-
-            // Insert into DB and mark used
-            const insertRes = await client.query(
-              `INSERT INTO generated_topics(track_name, difficulty, topic_text, is_behavioral, is_used)
-               VALUES($1, $2, $3, $4, true)
-               ON CONFLICT (topic_text) DO UPDATE SET is_used = true
-               RETURNING id, topic_text, is_behavioral`,
-              [track, difficulty, promptText, isBehavioral]
-            );
-            topic = insertRes.rows[0] || { id: null, topic_text: promptText, is_behavioral: isBehavioral };
-            log.info(`[Topic Engine] Successfully synthesized on-demand topic: "${promptText.substring(0, 35)}..."`);
-          }
-        } catch (synthErr) {
-          log.warn(`[Topic Engine] On-demand live synthesis failed (${synthErr.message}). Attempting DB fallback...`);
-        }
-      }
-
-      // Secondary fallback to LRU or random if live synthesis had an error
-      if (!topic && userId) {
-        topic = await getLruTopic(client, track, difficulty, userId);
-      }
-      if (!topic) {
-        topic = await getRandomTopic(client, track, difficulty);
-      }
-
-      // 4. Return the selected topic
-      if (topic) {
-        log.info(`Found topic: "${topic.topic_text.substring(0, 30)}..."`);
-        if (topic.id) await markTopicUsed(client, topic.id);
-        return res.json({
-          topic: topic.topic_text,
-          track,
-          difficulty,
-          isBehavioral: topic.is_behavioral || false,
-        });
-      }
-
-      res.status(503).json({ error: 'Forge is busy. Falling back to local data.' });
-    } finally {
-      client.release();
-    }
-
-  } catch (error) {
-    log.error("Topic generation failed:", error.message);
-    res.status(503).json({ error: 'Forge is busy. Falling back to local data.' });
+    return res.status(503).json({ error: 'Forge is busy. Falling back to local data.' });
+  } catch (dbError) {
+    log.error("Topic route failed:", dbError.message);
+    return res.status(503).json({ error: 'Forge is busy. Falling back to local data.' });
+  } finally {
+    if (client) client.release();
   }
 });
 

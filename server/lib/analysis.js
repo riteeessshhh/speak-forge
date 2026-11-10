@@ -73,8 +73,8 @@ export const analysisResultSchema = z.object({
 });
 
 export const FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.5-flash"
+  "gemini-3-flash-preview",
+  "gemini-flash-lite-latest"
 ];
 
 /**
@@ -406,7 +406,7 @@ export async function analyzeTranscript({
       lastError = err;
       const msg = err.message || '';
       const status = err.status || err.code || 500;
-      if (status === 404 || status === 429 || status === 503 || msg.includes('high demand') || msg.includes('Quota')) {
+      if (status === 404 || status === 429 || status === 503 || msg.includes('high demand') || msg.includes('Quota') || msg.includes('timed out')) {
         const reason = status === 404 ? 'Not Found' : (status === 429 ? 'Quota' : 'High Demand');
         log.warn(`${modelName} unavailable (${reason}). Trying next model...`);
       } else {

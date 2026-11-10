@@ -31,7 +31,7 @@ ${trackInstructions}
 CRITICAL RULES:
 1. SCORE CALIBRATION (INTEGERS 0-10 ONLY):
    - 9–10: Comprehensive depth, addresses technical trade-offs, edge cases, failure modes, or quantifiable business impact. NEVER award 9-10 to answers under 60 words.
-   - 7–8: Factually sound, structured, and clear logic. Answers that clearly explain technical reasons (e.g. static typing catching runtime bugs early) deserve 7-8 clarity.
+   - 7–8: Factually sound, structured, and clear logic. Complete 4-part STAR behavioral answers with Situation, Task, data-backed Action, and clear Result deserve 8–9 on clarity & structure. Answers that clearly explain technical reasons (e.g. static typing catching runtime bugs early) deserve 7-8 clarity.
    - 5–6: High-level or basic correctness, but superficial or missing mechanisms (e.g. simple book analogies).
    - 1–4: Inaccurate, rambling, or off-topic.
 2. STAR METHOD:
@@ -62,7 +62,11 @@ Output JSON ONLY:
 
   try {
     log.info("[Agent 1] Content Specialist evaluating transcript...");
-    const raw = await withExponentialBackoff(() => generateContent(prompt, "gemini-3.5-flash-lite"), 2, 800);
+    const raw = await withExponentialBackoff(
+      () => generateContent(prompt, "gemini-3-flash-preview", { preferProvider: 'groq' }),
+      2,
+      500
+    );
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (jsonMatch) return JSON.parse(jsonMatch[0]);
   } catch (err) {
@@ -134,7 +138,11 @@ Output JSON ONLY:
 
   try {
     log.info("[Agent 2] Delivery & Presence Specialist evaluating acoustics & vision...");
-    const raw = await withExponentialBackoff(() => generateContent(prompt, "gemini-3.5-flash-lite"), 2, 800);
+    const raw = await withExponentialBackoff(
+      () => generateContent(prompt, "gemini-3-flash-preview", { preferProvider: 'groq', preferBalanced: true }),
+      2,
+      500
+    );
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (jsonMatch) return JSON.parse(jsonMatch[0]);
   } catch (err) {
@@ -185,7 +193,11 @@ Output JSON ONLY:
 
   try {
     log.info("[Agent 3] Memory Historian comparing against past sessions...");
-    const raw = await withExponentialBackoff(() => generateContent(prompt, "gemini-3.5-flash-lite"), 2, 800);
+    const raw = await withExponentialBackoff(
+      () => generateContent(prompt, "gemini-3-flash-preview", { preferProvider: 'groq', preferBalanced: true }),
+      2,
+      500
+    );
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (jsonMatch) return JSON.parse(jsonMatch[0]);
   } catch (err) {
@@ -247,7 +259,7 @@ YOUR OBJECTIVE AS LEAD COACH:
 1. Synthesize the findings into a cohesive, executive-grade evaluation.
 2. SCORE CALIBRATION RULES (INTEGER 0-10 ONLY):
    - 9–10: Comprehensive depth, addresses trade-offs and concrete impact. NEVER award 9-10 if under 60 words.
-   - 7–8: Factually sound, structured, clear reasoning (e.g. static typing catching runtime bugs early).
+   - 7–8: Factually sound, structured, clear reasoning (e.g. static typing catching runtime bugs early). Complete STAR behavioral responses with Situation, Task, data-backed Action, and clear Result deserve 8–9 clarity & structure.
    - 5–6: Basic correctness, but superficial or incomplete (e.g. simple book analogies).
    - 1–4: Inadequate or rambling.
    - Scores MUST be whole integers (no decimals like 8.5 or 9.5).
@@ -290,7 +302,11 @@ Output JSON ONLY:
 }`;
 
   log.info("[Agent 4] Lead Coach Orchestrator synthesizing specialist reports...");
-  const raw = await withExponentialBackoff(() => generateContent(prompt, "gemini-3.5-flash-lite"), 2, 1000);
+  const raw = await withExponentialBackoff(
+    () => generateContent(prompt, "gemini-3-flash-preview", { preferProvider: 'groq', timeoutMs: 22000 }),
+    2,
+    600
+  );
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("Lead Coach Orchestrator failed to produce valid JSON");
@@ -298,11 +314,21 @@ Output JSON ONLY:
 
   const result = JSON.parse(jsonMatch[0]);
 
-  // Normalize scores to clean integers
+  // Normalize scores to clean integers & harden required schema fields
   result.confidenceScore = Math.max(0, Math.min(10, Math.round(Number(result.confidenceScore) || 0)));
   result.clarityScore = Math.max(0, Math.min(10, Math.round(Number(result.clarityScore) || 0)));
   result.structureScore = Math.max(0, Math.min(10, Math.round(Number(result.structureScore) || 0)));
   result.fillerWordsCount = Math.max(0, Math.round(Number(result.fillerWordsCount) || 0));
+  result.answerLogic = typeof result.answerLogic === 'string' && result.answerLogic.trim()
+    ? result.answerLogic.trim()
+    : (contentReport.answerLogic || "Structured response evaluated.");
+  result.strengths = Array.isArray(result.strengths) ? result.strengths.map(String) : (contentReport.contentStrengths || []);
+  result.weaknesses = Array.isArray(result.weaknesses) ? result.weaknesses.map(String) : (contentReport.contentWeaknesses || []);
+  result.overallFeedback = typeof result.overallFeedback === 'string' ? result.overallFeedback.trim() : "Analysis complete.";
+  result.idealAnswer = typeof result.idealAnswer === 'string' ? result.idealAnswer.trim() : "";
+  if (result.starMethodUsed === undefined) {
+    result.starMethodUsed = contentReport.starMethodUsed ?? null;
+  }
 
   const words = transcriptText?.trim().split(/\s+/).filter(w => w.length > 0) || [];
   if (words.length < 60) {

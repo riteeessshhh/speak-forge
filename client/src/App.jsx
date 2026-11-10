@@ -144,10 +144,16 @@ function AppContent() {
   const [activeJobSessionId, setActiveJobSessionId] = useState(null);
   const pollTimerRef = useRef(null);
   const phaseRef = useRef(phase);
+  const recentTopicsRef = useRef([]);
 
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  // Pre-warm backend server (eliminates Render free-tier cold start lag on mobile)
+  useEffect(() => {
+    fetch(`${API_URL}/health`).catch(() => {});
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -227,44 +233,60 @@ function AppContent() {
     setIsGeneratingTopic(true);
 
     let generatedTopic = null;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+    let lastErrorMessage = null;
 
-      const res = await fetch(`${API_URL}/api/generate-topic`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          track: selectedCard.trackName,
-          difficulty: selectedDifficulty,
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+    // Try up to 2 attempts (resilient against cold-start or transient 502/503 spikes)
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
 
-      if (res.ok) {
-        const data = await res.json();
-        generatedTopic = {
-          track: selectedCard.trackName,
-          difficulty: selectedDifficulty,
-          topic: data.topic,
-          isBehavioral: data.isBehavioral || false
-        };
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        console.warn("[App] Topic generation non-ok response:", res.status, errorData);
-        toast.error(errorData.error || "AI Forge is busy.");
+        const res = await fetch(`${API_URL}/api/generate-topic`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            track: selectedCard.trackName,
+            difficulty: selectedDifficulty,
+            excludeTopics: recentTopicsRef.current.slice(0, 10),
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          generatedTopic = {
+            track: selectedCard.trackName,
+            difficulty: selectedDifficulty,
+            topic: data.topic,
+            isBehavioral: data.isBehavioral || false
+          };
+          recentTopicsRef.current = [data.topic, ...recentTopicsRef.current].slice(0, 15);
+          break;
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          lastErrorMessage = errorData.error || `Server error (${res.status})`;
+          console.warn(`[App] Topic generation attempt ${attempt} failed:`, res.status, errorData);
+          if (res.status === 401 || res.status === 400) break; // Don't retry auth/validation failures
+        }
+      } catch (err) {
+        lastErrorMessage = err.name === 'AbortError'
+          ? "AI generation timed out. Using local fallback."
+          : "Network lag detected. Using local fallback.";
+        console.warn(`[App] Topic generation attempt ${attempt} fetch error:`, err);
       }
-    } catch (err) {
-      console.warn("[App] Topic generation fetch error:", err);
-      toast.error(err.name === 'AbortError' ? "AI generation timed out. Using local fallback." : "Network lag detected. Using local fallback.");
+
+      if (attempt === 1) {
+        await new Promise((r) => setTimeout(r, 800));
+      }
     }
 
     setIsGeneratingTopic(false);
     if (generatedTopic) {
       setCurrentTopic(generatedTopic);
     } else {
+      toast.error(lastErrorMessage || "AI Forge is busy.");
       const result = getRandomTopic(selectedCard.trackName, selectedDifficulty);
       if (!result) return;
       setCurrentTopic(result);

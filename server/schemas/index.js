@@ -21,6 +21,7 @@ export const topicSchema = z.object({
   difficulty: z.enum(['easy', 'medium', 'hard'], {
     errorMap: () => ({ message: 'Difficulty must be easy, medium, or hard.' }),
   }),
+  excludeTopics: z.array(z.string()).max(30).optional(),
 });
 
 export const uploadSchema = z.object({
