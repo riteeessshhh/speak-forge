@@ -15,8 +15,8 @@ import authRoutes from './routes/auth.js';
 import topicRoutes from './routes/topics.js';
 import uploadRoutes from './routes/upload.js';
 import analyticsRoutes from './routes/analytics.js';
-import { initQueue } from './lib/queue.js';
-import { ensureDatabaseSchema } from './db/initSchema.js';
+import { initQueue, getQueueHealth } from './lib/queue.js';
+import { ensureDatabaseSchema, isSchemaReady } from './db/initSchema.js';
 
 // Initialize environment
 // (Moved to top)
@@ -64,31 +64,32 @@ app.use('/api/generate-topic', topicRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-// Health Check
+// Health Check (responds immediately even during DB schema startup verification)
 app.get('/health', (req, res) => {
-  res.json({ status: 'UP', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'UP',
+    schemaReady: isSchemaReady(),
+    queue: getQueueHealth(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Global Error Handler
 app.use((err, req, res, next) => {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'Audio recording exceeds the 25MB limit.' });
+  }
   log.error(`Unhandled Error: ${err.message}`);
   log.error(err.stack);
-  res.status(500).json({ error: 'Internal server error.' });
+  res.status(err?.status || 500).json({ error: err?.message || 'Internal server error.' });
 });
 
-// Start Server after idempotent DB schema check
-async function startServer() {
-  try {
-    await ensureDatabaseSchema();
-  } catch (err) {
+// Bind HTTP port immediately so Render health checks & pre-warm pings succeed without waiting for DB DDL
+app.listen(PORT, () => {
+  log.info(`SpeakForge Server running on port ${PORT}`);
+  log.info(`CORS allowed from: ${baseOrigin} (and / version)`);
+  initQueue();
+  ensureDatabaseSchema().catch((err) => {
     log.error('Startup DB schema check failed (server continuing):', err.message);
-  }
-
-  app.listen(PORT, () => {
-    log.info(`SpeakForge Server running on port ${PORT}`);
-    log.info(`CORS allowed from: ${baseOrigin} (and / version)`);
-    initQueue();
   });
-}
-
-startServer();
+});

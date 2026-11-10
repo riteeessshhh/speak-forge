@@ -90,6 +90,8 @@ export async function storeSessionMemory(client, {
 
     const vectorStr = `[${embedding.join(',')}]`;
 
+    const toInt = (v) => (v !== null && v !== undefined && !Number.isNaN(Number(v)) ? Math.round(Number(v)) : null);
+
     const result = await client.query(
       `INSERT INTO session_memories(
          session_id, user_id, track_name, topic_text, transcript_summary,
@@ -106,11 +108,11 @@ export async function storeSessionMemory(client, {
         transcriptSummary || '',
         strengths,
         weaknesses,
-        fillerWordCount || 0,
-        wpm,
-        awkwardPauses || 0,
-        eyeContactPercent,
-        presenceScore,
+        toInt(fillerWordCount) ?? 0,
+        toInt(wpm),
+        toInt(awkwardPauses) ?? 0,
+        toInt(eyeContactPercent),
+        toInt(presenceScore),
         confidenceScore,
         clarityScore,
         structureScore,

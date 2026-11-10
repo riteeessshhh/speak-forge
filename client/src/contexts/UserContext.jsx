@@ -16,24 +16,39 @@ export function UserProvider({ children }) {
 
   // Hydrate auth state on mount from HttpOnly cookie or stored fallback token
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/api/auth/me`, {
-          credentials: 'include',
-          headers: getAuthHeaders(),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
-        } else if (res.status === 401) {
-          clearStoredToken();
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            const res = await fetch(`${API_URL}/api/auth/me`, {
+              credentials: 'include',
+              headers: getAuthHeaders(),
+            });
+            if (cancelled) return;
+            if (res.ok) {
+              const data = await res.json();
+              setUser(data.user);
+              return;
+            }
+            if (res.status === 401) {
+              clearStoredToken();
+              return;
+            }
+            if (res.status < 500 || attempt === 2) return;
+          } catch (err) {
+            if (attempt === 2) {
+              console.warn("Auth hydration failed:", err.message);
+              return;
+            }
+          }
+          await new Promise((r) => setTimeout(r, 1500));
         }
-      } catch (err) {
-        console.warn("Auth hydration failed:", err.message);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   const signup = useCallback(async (email, password) => {

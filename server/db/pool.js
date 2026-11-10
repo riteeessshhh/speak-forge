@@ -31,6 +31,8 @@ if (rawConnectionString.includes('@') && rawConnectionString.indexOf('@') !== ra
 const pool = new Pool({
   connectionString,
   ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
   // Force IPv4 to avoid ENETUNREACH errors on Render/Supabase
   family: 4, 

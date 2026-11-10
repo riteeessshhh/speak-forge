@@ -143,18 +143,49 @@ function AppContent() {
 
   const [jobProgressStep, setJobProgressStep] = useState('transcribing');
   const [activeJobSessionId, setActiveJobSessionId] = useState(null);
+  const [uploadStage, setUploadStage] = useState(null); // 'waking' | 'uploading' | 'queued' | null
   const pollTimerRef = useRef(null);
   const phaseRef = useRef(phase);
   const recentTopicsRef = useRef([]);
+  const lastBackendOkRef = useRef(0);
 
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
 
-  // Pre-warm backend server (eliminates Render free-tier cold start lag on mobile)
-  useEffect(() => {
-    fetch(`${API_URL}/health`).catch(() => {});
+  const pingBackendHealth = useCallback(async (timeoutMs = 10000) => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(`${API_URL}/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        lastBackendOkRef.current = Date.now();
+        return true;
+      }
+    } catch {
+      // Ignore silent pre-warm failures
+    }
+    return false;
   }, []);
+
+  // Pre-warm backend server (mount, session prep/recording, and tab resume on mobile)
+  useEffect(() => {
+    pingBackendHealth();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastBackendOkRef.current > 45000) {
+        pingBackendHealth();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [pingBackendHealth]);
+
+  useEffect(() => {
+    if (phase === 'thinking' || phase === 'recording') {
+      pingBackendHealth();
+    }
+  }, [phase, pingBackendHealth]);
 
   useEffect(() => {
     return () => {
@@ -256,6 +287,7 @@ function AppContent() {
         clearTimeout(timeoutId);
 
         if (res.ok) {
+          lastBackendOkRef.current = Date.now();
           const data = await res.json();
           generatedTopic = {
             track: selectedCard.trackName,
@@ -342,6 +374,7 @@ function AppContent() {
     setCurrentTopic(null);
     setAnalysisResult(null);
     setAnalysisError(null);
+    if (!activeJobSessionId) setUploadStage(null);
     setShowDashboard(false);
   };
 
@@ -365,6 +398,7 @@ function AppContent() {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
         setIsAnalyzing(false);
+        setUploadStage(null);
         setAnalysisError("Analysis took longer than expected. Check Analytics in a moment or retry.");
         toast.error("Analysis timed out while polling. Check Analytics or retry.");
         return;
@@ -381,6 +415,7 @@ function AppContent() {
           pollTimerRef.current = null;
           setIsAnalyzing(false);
           setActiveJobSessionId(null);
+          setUploadStage(null);
           const msg = res.status === 401
             ? "Session expired. Please log in again."
             : "Analysis session could not be found.";
@@ -391,10 +426,11 @@ function AppContent() {
 
         if (!res.ok) {
           consecutiveErrors += 1;
-          if (consecutiveErrors >= 6) {
+          if (consecutiveErrors >= 12) {
             clearInterval(pollTimerRef.current);
             pollTimerRef.current = null;
             setIsAnalyzing(false);
+            setUploadStage(null);
             setAnalysisError(`Unable to reach server (HTTP ${res.status}). Please retry.`);
             toast.error("Lost connection to analysis server. Please retry.");
           }
@@ -402,6 +438,7 @@ function AppContent() {
         }
 
         consecutiveErrors = 0;
+        lastBackendOkRef.current = Date.now();
         const data = await res.json();
         if (data.progressStep) {
           setJobProgressStep(data.progressStep);
@@ -412,6 +449,7 @@ function AppContent() {
           pollTimerRef.current = null;
           setIsAnalyzing(false);
           setActiveJobSessionId(null);
+          setUploadStage(null);
           setAnalysisError(null);
 
           const parsedAnalysis = typeof data.analysisJson === 'string'
@@ -459,6 +497,7 @@ function AppContent() {
           pollTimerRef.current = null;
           setIsAnalyzing(false);
           setActiveJobSessionId(null);
+          setUploadStage(null);
           const failMsg = data.errorMessage || 'Analysis failed. Please try again.';
           setAnalysisError(failMsg);
           toast.error(`Analysis failed: ${failMsg}`);
@@ -466,10 +505,11 @@ function AppContent() {
       } catch (err) {
         console.error("Polling error:", err);
         consecutiveErrors += 1;
-        if (consecutiveErrors >= 6) {
+        if (consecutiveErrors >= 12) {
           clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;
           setIsAnalyzing(false);
+          setUploadStage(null);
           setAnalysisError("Network error while checking analysis progress. Please retry.");
           toast.error("Network error while checking analysis progress.");
         }
@@ -486,47 +526,91 @@ function AppContent() {
 
     setIsAnalyzing(true);
     setAnalysisError(null);
+    setActiveJobSessionId(null);
     setJobProgressStep('transcribing');
 
     try {
-      const extension = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
-      const formData = new FormData();
-      formData.append('track', currentTopic.track);
-      formData.append('difficulty', currentTopic.difficulty);
-      formData.append('topic', currentTopic.topic);
-      formData.append('isBehavioral', currentTopic.isBehavioral || false);
-      if (vision.visualSummary) {
-        formData.append('visualMetrics', JSON.stringify(vision.visualSummary));
+      // 1. Pre-warm / wake Render server before pushing binary audio over mobile networks
+      if (Date.now() - lastBackendOkRef.current > 45000) {
+        setUploadStage('waking');
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          if (await pingBackendHealth(10000)) break;
+          if (attempt < 5) await new Promise((r) => setTimeout(r, 1500));
+        }
       }
-      formData.append('audio', audioBlob, `recording.${extension}`);
 
-      const controller = new AbortController();
-      const uploadTimeout = setTimeout(() => controller.abort(), 45000);
+      // 2. Upload recording with generous 120s timeout + 1 automatic retry for transient 502/503 spikes
+      setUploadStage('uploading');
+      const mimeSub = audioBlob.type?.split('/')[1]?.split(';')[0]?.trim()?.toLowerCase();
+      const extMap = { 'x-m4a': 'm4a', 'x-wav': 'wav', wave: 'wav', opus: 'ogg', mpeg: 'mp3' };
+      const extension = extMap[mimeSub] || mimeSub || 'webm';
 
-      const response = await fetch(`${API_URL}/api/upload`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: getAuthHeaders(),
-        body: formData,
-        signal: controller.signal,
-      });
-      clearTimeout(uploadTimeout);
+      const buildFormData = () => {
+        const fd = new FormData();
+        fd.append('track', currentTopic.track);
+        fd.append('difficulty', currentTopic.difficulty);
+        fd.append('topic', currentTopic.topic);
+        fd.append('isBehavioral', currentTopic.isBehavioral || false);
+        if (vision.visualSummary) {
+          fd.append('visualMetrics', JSON.stringify(vision.visualSummary));
+        }
+        fd.append('audio', audioBlob, `recording.${extension}`);
+        return fd;
+      };
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Upload failed (${response.status})`);
+      let response = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const controller = new AbortController();
+        const uploadTimeout = setTimeout(() => controller.abort(), 120000);
+        try {
+          response = await fetch(`${API_URL}/api/upload`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: getAuthHeaders(),
+            body: buildFormData(),
+            signal: controller.signal,
+          });
+          clearTimeout(uploadTimeout);
+        } catch (fetchErr) {
+          clearTimeout(uploadTimeout);
+          if (fetchErr.name === 'AbortError' || attempt === 2) {
+            throw fetchErr;
+          }
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
+
+        if (response.ok) break;
+        if ([400, 401, 403, 404, 413].includes(response.status) || attempt === 2) break;
+
+        if (response.status >= 500) {
+          setUploadStage('waking');
+          await new Promise((r) => setTimeout(r, 2000));
+          await pingBackendHealth(12000);
+          setUploadStage('uploading');
+        } else {
+          break;
+        }
+      }
+
+      if (!response || !response.ok) {
+        const errorData = response ? await response.json().catch(() => ({})) : {};
+        throw new Error(errorData.error || `Upload failed (${response?.status || 'network error'})`);
       }
 
       const data = await response.json();
+      lastBackendOkRef.current = Date.now();
+      setUploadStage('queued');
       setActiveJobSessionId(data.sessionId);
       startJobPolling(data.sessionId, currentTopic.topic);
     } catch (err) {
       const msg = err.name === 'AbortError'
-        ? 'Upload timed out. Check your connection and try again.'
+        ? 'Upload timed out waiting for the server. Please check your connection and tap Retry AI Feedback.'
         : (err.message || 'Analysis request failed');
       setAnalysisError(msg);
       toast.error(msg);
       setIsAnalyzing(false);
+      setUploadStage(null);
     }
   };
 
@@ -857,7 +941,13 @@ function AppContent() {
                       {isAnalyzing ? (
                         <div className="w-full h-14 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 animate-pulse cursor-not-allowed">
                           <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
-                          <span>Processing in Background Queue...</span>
+                          <span>
+                            {uploadStage === 'waking'
+                              ? 'Waking AI Server...'
+                              : uploadStage === 'uploading'
+                                ? 'Uploading Recording...'
+                                : 'Processing in Background Queue...'}
+                          </span>
                         </div>
                       ) : (
                         <>
@@ -883,36 +973,57 @@ function AppContent() {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
                         <div className="space-y-1">
                           <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <Bot className="w-3.5 h-3.5" /> BullMQ / Redis Queue Active
+                            <Bot className="w-3.5 h-3.5" />{' '}
+                            {activeJobSessionId
+                              ? 'BullMQ / Redis Queue Active'
+                              : uploadStage === 'waking'
+                                ? 'Connecting to Server'
+                                : 'Secure Upload in Progress'}
                           </span>
-                          <h3 className="text-base sm:text-lg font-bold text-white">Analyzing Your Speech</h3>
-                          <p className="text-xs text-zinc-400">Audio uploaded. You can wait here or practice your next prompt immediately.</p>
+                          <h3 className="text-base sm:text-lg font-bold text-white">
+                            {activeJobSessionId
+                              ? 'Analyzing Your Speech'
+                              : uploadStage === 'waking'
+                                ? 'Waking AI Coaching Server'
+                                : 'Uploading Your Recording'}
+                          </h3>
+                          <p className="text-xs text-zinc-400">
+                            {activeJobSessionId
+                              ? 'Audio uploaded. You can wait here or practice your next prompt immediately.'
+                              : uploadStage === 'waking'
+                                ? 'Free-tier cloud servers sleep after inactivity (cold start ~25–45s). Hanging tight...'
+                                : 'Uploading audio to cloud storage. Please keep this tab open until queued.'}
+                          </p>
                         </div>
-                        <button
-                          onClick={() => {
-                            setPhase("selection");
-                            clearAudio();
-                            setSelectedArena(null);
-                            setSelectedDifficulty(null);
-                            toast("Analysis running in background. You will be notified when ready!", { icon: "🔔" });
-                          }}
-                          className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold transition-all cursor-pointer border border-zinc-700/60 flex items-center justify-center gap-2 shrink-0 shadow-lg"
-                        >
-                          <span>Practice Next Prompt</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                        {activeJobSessionId && (
+                          <button
+                            onClick={() => {
+                              setPhase("selection");
+                              clearAudio();
+                              setSelectedArena(null);
+                              setSelectedDifficulty(null);
+                              toast("Analysis running in background. You will be notified when ready!", { icon: "🔔" });
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold transition-all cursor-pointer border border-zinc-700/60 flex items-center justify-center gap-2 shrink-0 shadow-lg"
+                          >
+                            <span>Practice Next Prompt</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
 
                       {/* 3-Step Live Progress Stepper */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {/* Step 1 */}
                         <div className={`p-4 rounded-2xl border transition-all ${
-                          jobProgressStep === 'transcribing'
+                          !activeJobSessionId
+                            ? 'bg-zinc-950/20 border-zinc-900 text-zinc-600'
+                            : jobProgressStep === 'transcribing'
                             ? 'bg-violet-500/10 border-violet-500/40 text-violet-300'
                             : 'bg-zinc-950/40 border-zinc-800 text-zinc-400'
                         }`}>
                           <div className="flex items-center gap-2 mb-1.5">
-                            <div className={`w-2 h-2 rounded-full ${jobProgressStep === 'transcribing' ? 'bg-violet-400 animate-ping' : 'bg-emerald-400'}`} />
+                            <div className={`w-2 h-2 rounded-full ${!activeJobSessionId ? 'bg-zinc-700' : jobProgressStep === 'transcribing' ? 'bg-violet-400 animate-ping' : 'bg-emerald-400'}`} />
                             <span className="text-[10px] font-black uppercase tracking-wider">Step 1</span>
                           </div>
                           <p className="text-xs font-bold text-white">Acoustic Transcription</p>

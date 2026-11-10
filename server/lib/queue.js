@@ -29,14 +29,24 @@ const QUEUE_NAME = 'analysis-queue';
 
 let analysisQueue = null;
 let analysisWorker = null;
-let redisConnection = null;
+let queueRedisConnection = null;
+let workerRedisConnection = null;
 let isRedisAvailable = false;
 
 // In-memory job state tracker (for dev or fast status lookups)
 const inMemoryJobs = new Map();
 
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Core async job execution pipeline.
+ * Avoids holding PostgreSQL pool clients open during long external HTTP calls (Supabase, Groq, LLMs).
  */
 export async function processAnalysisJob(jobData) {
   const { 
@@ -56,11 +66,9 @@ export async function processAnalysisJob(jobData) {
   log.info(`[Job ${sessionId}] Starting background analysis pipeline...`);
   inMemoryJobs.set(sessionId, { status: 'processing', progressStep: 'transcribing', error: null });
 
-  const client = await pool.connect();
-
   try {
     // ─── STEP 1: TRANSCRIBING ───
-    await updateSessionStatus(client, sessionId, 'processing', 'transcribing');
+    await updateSessionStatus(pool, sessionId, 'processing', 'transcribing');
 
     let audioBuffer = Buffer.isBuffer(rawBuffer)
       ? rawBuffer
@@ -79,9 +87,11 @@ export async function processAnalysisJob(jobData) {
 
       if (objectPath) {
         log.info(`[Job ${sessionId}] Downloading audio via Supabase SDK: ${objectPath}`);
-        const { data: blobData, error: dlErr } = await supabase.storage
-          .from('recordings')
-          .download(objectPath);
+        const { data: blobData, error: dlErr } = await withTimeout(
+          supabase.storage.from('recordings').download(objectPath),
+          25000,
+          'Supabase storage download'
+        );
 
         if (!dlErr && blobData) {
           audioBuffer = Buffer.from(await blobData.arrayBuffer());
@@ -91,7 +101,7 @@ export async function processAnalysisJob(jobData) {
       }
 
       if (!audioBuffer && s3Url) {
-        const resp = await fetch(s3Url);
+        const resp = await withTimeout(fetch(s3Url), 25000, 'Direct audio URL fetch');
         if (!resp.ok) throw new Error(`Failed to fetch audio from storage: ${resp.statusText}`);
         audioBuffer = Buffer.from(await resp.arrayBuffer());
       }
@@ -118,7 +128,7 @@ export async function processAnalysisJob(jobData) {
     inMemoryJobs.set(sessionId, { status: 'processing', progressStep: 'evaluating', transcriptText });
 
     // ─── STEP 2: MULTI-AGENT COUNCIL EVALUATING ───
-    await updateSessionStatus(client, sessionId, 'processing', 'evaluating');
+    await updateSessionStatus(pool, sessionId, 'processing', 'evaluating');
 
     // Retrieve longitudinal RAG memories
     let pastMemories = [];
@@ -145,22 +155,30 @@ export async function processAnalysisJob(jobData) {
     const finalFillerCount = analysisJson.fillerWordsCount ?? fallbackFillerCount;
     inMemoryJobs.set(sessionId, { status: 'processing', progressStep: 'storing', transcriptText, analysisJson });
 
-    // ─── STEP 3: STORING RESULTS ───
-    await updateSessionStatus(client, sessionId, 'processing', 'storing');
+    // ─── STEP 3: STORING RESULTS (Short-lived DB transaction) ───
+    await updateSessionStatus(pool, sessionId, 'processing', 'storing');
 
-    await client.query('BEGIN');
-    await insertRecording(client, sessionId, s3Url, transcriptText, analysisJson);
-    await insertAnalytics(
-      client, 
-      sessionId, 
-      userId, 
-      finalFillerCount,
-      analysisJson.confidenceScore ?? null,
-      analysisJson.clarityScore ?? null,
-      analysisJson.structureScore ?? null
-    );
-    await updateSessionStatus(client, sessionId, 'completed', 'ready', null);
-    await client.query('COMMIT');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await insertRecording(client, sessionId, s3Url, transcriptText, analysisJson);
+      await insertAnalytics(
+        client, 
+        sessionId, 
+        userId, 
+        finalFillerCount,
+        analysisJson.confidenceScore ?? null,
+        analysisJson.clarityScore ?? null,
+        analysisJson.structureScore ?? null
+      );
+      await updateSessionStatus(client, sessionId, 'completed', 'ready', null);
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     log.info(`[Job ${sessionId}] Analysis persisted to database successfully.`);
 
@@ -196,8 +214,7 @@ export async function processAnalysisJob(jobData) {
   } catch (err) {
     log.error(`[Job ${sessionId}] Processing error:`, err.message);
     try {
-      await client.query('ROLLBACK');
-      await updateSessionStatus(client, sessionId, 'failed', 'failed', err.message);
+      await updateSessionStatus(pool, sessionId, 'failed', 'failed', err.message);
     } catch (dbErr) {
       log.error(`[Job ${sessionId}] Failed to mark session as failed in DB:`, dbErr.message);
     }
@@ -209,49 +226,78 @@ export async function processAnalysisJob(jobData) {
     });
 
     throw err;
-  } finally {
-    client.release();
   }
 }
 
 /**
- * Initialize BullMQ with Redis connection if configured.
+ * Initialize BullMQ with dedicated Queue + Worker Redis connections if configured.
  */
 export function initQueue() {
-  const redisUrl = process.env.REDIS_URL;
+  const redisUrl = (process.env.REDIS_URL || '').trim();
 
   if (redisUrl) {
     try {
       log.info("[Queue] Connecting to Redis at:", redisUrl.replace(/\/\/[^@]*@/, '//***@'));
-      redisConnection = new IORedis(redisUrl, {
+      const useTls = redisUrl.startsWith('rediss://');
+      const retryStrategy = (times) => {
+        if (times > 5) {
+          log.warn("[Queue] Redis connection attempts exceeded. Using resilient in-process async runner.");
+          isRedisAvailable = false;
+          return null;
+        }
+        return Math.min(times * 1000, 3000);
+      };
+
+      // Queue connection: fail fast without offline queuing so POST /api/upload never hangs on stalled Redis
+      queueRedisConnection = new IORedis(redisUrl, {
+        connectTimeout: 5000,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+        enableReadyCheck: true,
+        tls: useTls ? { rejectUnauthorized: false } : undefined,
+        retryStrategy,
+      });
+
+      // Separate Worker connection: BullMQ blocks on BZPOPMIN so Worker must NEVER share Queue's socket
+      workerRedisConnection = new IORedis(redisUrl, {
+        connectTimeout: 5000,
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
-        retryStrategy(times) {
-          if (times > 5) {
-            log.warn("[Queue] Redis connection attempts exceeded. Falling back to in-process async runner.");
-            return null;
-          }
-          return Math.min(times * 1000, 3000);
-        }
+        tls: useTls ? { rejectUnauthorized: false } : undefined,
+        retryStrategy,
       });
 
-      redisConnection.on('connect', () => {
-        log.info("[Queue] Redis connection established. Enabling BullMQ cluster.");
+      queueRedisConnection.on('ready', () => {
+        log.info("[Queue] Redis connection ready. Enabling BullMQ cluster.");
         isRedisAvailable = true;
       });
+      queueRedisConnection.on('close', () => {
+        isRedisAvailable = false;
+      });
+      queueRedisConnection.on('end', () => {
+        isRedisAvailable = false;
+      });
+      queueRedisConnection.on('error', (err) => {
+        isRedisAvailable = false;
+        log.warn("[Queue] Redis queue connection issue:", err.message);
+      });
 
-      redisConnection.on('error', (err) => {
-        log.warn("[Queue] Redis connection issue:", err.message);
+      workerRedisConnection.on('error', (err) => {
+        log.warn("[Queue] Redis worker connection issue:", err.message);
       });
 
       analysisQueue = new Queue(QUEUE_NAME, {
-        connection: redisConnection,
+        connection: queueRedisConnection,
         defaultJobOptions: {
           attempts: 3,
           backoff: { type: 'exponential', delay: 2000 },
           removeOnComplete: { count: 100 },
           removeOnFail: { count: 100 },
         }
+      });
+      analysisQueue.on('error', (err) => {
+        isRedisAvailable = false;
+        log.warn("[BullMQ Queue] Error:", err.message);
       });
 
       analysisWorker = new Worker(
@@ -261,15 +307,17 @@ export function initQueue() {
           return await processAnalysisJob(job.data);
         },
         { 
-          connection: redisConnection,
+          connection: workerRedisConnection,
           concurrency: 3,
         }
       );
 
+      analysisWorker.on('error', (err) => {
+        log.warn("[BullMQ Worker] Error:", err.message);
+      });
       analysisWorker.on('completed', (job) => {
         log.info(`[BullMQ Worker] Job ${job.id} completed successfully.`);
       });
-
       analysisWorker.on('failed', (job, err) => {
         log.error(`[BullMQ Worker] Job ${job?.id} failed on attempt ${job?.attemptsMade}:`, err.message);
       });
@@ -285,24 +333,26 @@ export function initQueue() {
 }
 
 /**
- * Enqueue a new analysis job.
+ * Enqueue a new analysis job with fail-fast 2.5s Redis guard.
  */
 export async function addAnalysisJob(jobData) {
   const { sessionId, isReanalyze } = jobData;
   inMemoryJobs.set(sessionId, { status: 'queued', progressStep: 'transcribing', error: null });
 
-  if (isRedisAvailable && analysisQueue) {
+  if (isRedisAvailable && analysisQueue && queueRedisConnection?.status === 'ready') {
     try {
       // Omit binary audioBuffer in Redis JSON payload; worker downloads cleanly from Supabase s3Url
       const { audioBuffer, ...serializableJobData } = jobData;
       const bullJobId = isReanalyze ? `${sessionId}-re-${Date.now()}` : sessionId;
-      const job = await analysisQueue.add('analyze', serializableJobData, {
-        jobId: bullJobId,
-      });
+      const job = await withTimeout(
+        analysisQueue.add('analyze', serializableJobData, { jobId: bullJobId }),
+        2500,
+        'Redis BullMQ enqueue'
+      );
       log.info(`[Queue] Session ${sessionId} enqueued in BullMQ (Job ID: ${job.id})`);
       return { type: 'bullmq', jobId: job.id };
     } catch (err) {
-      log.warn(`[Queue] Failed to enqueue to Redis, switching to in-process execution:`, err.message);
+      log.warn(`[Queue] Failed/timed out enqueueing to Redis (${err.message}), switching to in-process execution.`);
     }
   }
 
@@ -323,4 +373,14 @@ export async function addAnalysisJob(jobData) {
  */
 export function getInMemoryJobStatus(sessionId) {
   return inMemoryJobs.get(sessionId) || null;
+}
+
+/**
+ * Non-sensitive queue readiness string for /health diagnostics.
+ */
+export function getQueueHealth() {
+  if (!process.env.REDIS_URL) return 'in-process';
+  return isRedisAvailable && queueRedisConnection?.status === 'ready'
+    ? 'bullmq-ready'
+    : 'in-process-fallback';
 }

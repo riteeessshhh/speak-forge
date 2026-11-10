@@ -11,6 +11,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { log } from '../lib/logger.js';
 import pool from '../db/pool.js';
+import { awaitSchemaReady } from '../db/initSchema.js';
 import supabase from '../lib/supabase.js';
 import { verifyToken } from '../middleware/auth.js';
 import { addAnalysisJob, getInMemoryJobStatus } from '../lib/queue.js';
@@ -19,6 +20,14 @@ import {
   getSessionWithAnalysis, 
   updateSessionStatus 
 } from '../db/queries.js';
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
 
 const router = Router();
 const storage = multer.memoryStorage();
@@ -84,18 +93,27 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
   }
 
   const { ext, contentType } = resolveAudioFormat(audioFile);
+  const tStart = Date.now();
   log.info(`Received audio: ${audioFile.originalname} (${contentType}, .${ext}) | Size: ${audioFile.size} bytes for user ${userId}`);
 
   try {
+    await awaitSchemaReady(10000);
+
     // 1. Upload audio to Supabase Storage preserving container format/extension
     const tempId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const fileName = `${tempId}.${ext}`;
 
-    const { error: uploadErr } = await supabase.storage
-      .from('recordings')
-      .upload(fileName, audioFile.buffer, {
-        contentType,
-      });
+    const tStorageStart = Date.now();
+    const { error: uploadErr } = await withTimeout(
+      supabase.storage
+        .from('recordings')
+        .upload(fileName, audioFile.buffer, {
+          contentType,
+        }),
+      25000,
+      'Supabase storage upload'
+    );
+    const tStorageMs = Date.now() - tStorageStart;
 
     if (uploadErr) {
       throw new Error(`Supabase upload failed: ${uploadErr.message}`);
@@ -107,6 +125,7 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
     const s3Url = publicUrlData.publicUrl;
 
     // 2. Insert session with initial status 'processing', 'transcribing', and persisted audio_url
+    const tDbStart = Date.now();
     const client = await pool.connect();
     let sessionId;
     try {
@@ -114,8 +133,10 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
     } finally {
       client.release();
     }
+    const tDbMs = Date.now() - tDbStart;
 
-    // 3. Dispatch to BullMQ / In-Process Queue
+    // 3. Dispatch to BullMQ / In-Process Queue (bounded <2.5s failover)
+    const tQueueStart = Date.now();
     const jobInfo = await addAnalysisJob({
       sessionId,
       userId,
@@ -129,10 +150,12 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
       storagePath: fileName,
       audioBuffer: audioFile.buffer,
     });
+    const tQueueMs = Date.now() - tQueueStart;
+    const tTotalMs = Date.now() - tStart;
 
-    log.info(`[Queue] Session ${sessionId} enqueued successfully (Job: ${jobInfo.jobId})`);
+    log.info(`[Queue] Session ${sessionId} enqueued (${jobInfo.type}, Job: ${jobInfo.jobId}) | Timings: storage=${tStorageMs}ms, db=${tDbMs}ms, queue=${tQueueMs}ms, total=${tTotalMs}ms`);
 
-    // 4. Return HTTP 202 Accepted immediately (<300ms)
+    // 4. Return HTTP 202 Accepted immediately
     return res.status(202).json({
       status: 'processing',
       progressStep: 'transcribing',
@@ -143,8 +166,10 @@ router.post('/', verifyToken, upload.single('audio'), async (req, res) => {
     });
 
   } catch (error) {
-    log.error('Upload route error:', error.message);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    const tElapsed = Date.now() - tStart;
+    log.error(`Upload route error after ${tElapsed}ms:`, error.message);
+    const isTimeout = error.message?.toLowerCase().includes('timed out');
+    res.status(isTimeout ? 504 : 500).json({ error: error.message || 'Internal server error' });
   }
 });
 
@@ -202,13 +227,9 @@ router.post('/reanalyze/:sessionId', verifyToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const client = await pool.connect();
-    let sessionData;
-    try {
-      sessionData = await getSessionWithAnalysis(client, sessionId, userId);
-    } finally {
-      client.release();
-    }
+    await awaitSchemaReady(10000);
+
+    const sessionData = await getSessionWithAnalysis(pool, sessionId, userId);
 
     if (!sessionData) {
       return res.status(404).json({ error: 'Session not found' });
@@ -219,12 +240,7 @@ router.post('/reanalyze/:sessionId', verifyToken, async (req, res) => {
     }
 
     // Mark session as processing
-    const client2 = await pool.connect();
-    try {
-      await updateSessionStatus(client2, sessionId, 'processing', 'transcribing', null);
-    } finally {
-      client2.release();
-    }
+    await updateSessionStatus(pool, sessionId, 'processing', 'transcribing', null);
 
     // Preserve extension from stored URL for accurate Whisper decoding
     const urlPath = sessionData.s3_url.split('?')[0] || '';
